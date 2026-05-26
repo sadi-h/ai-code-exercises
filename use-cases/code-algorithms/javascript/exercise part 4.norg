@@ -1,0 +1,81 @@
+* Now, apply your understanding to a practical scenario:
+
+  Scenario: Your team needs to implement a new business rule: "Tasks that are overdue for more than 7 days should be automatically marked as abandoned unless they are marked as high priority."
+  Planning: Based on your understanding from the previous parts:
+
+  $ _Identify which files you would need to modify_
+  - {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/models.js}[models.js] specifically the `TaskStatus` enum line object, and the `Task` class by adding a new method `isAbandoned`.
+  - {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/storage.js}[storage.js],  the `TaskStorage` class by adding a new method to get `abandoned` tasks. `TaskStorage's load method` would only need to be modidied
+    because when we load the tasks from storage and about to set the `status`, we can perform the check of whether its abandoned task or not.
+
+Outline the changes you would make to implement this rule
+
+@code javascript
+
+// models.js
+const TaskStatus = {
+  TODO: 'todo',
+  IN_PROGRESS: 'in_progress',
+  REVIEW: 'review',
+  DONE: 'done',
+  ABANDONED: 'abandoned',
+  PRIORITY: 'priority'
+};
+
+class Task {
+.... rest of code
+
+isAbandoned() {
+    if (!this.status) {
+      return false;
+    }
+    return this.status === TaskStatus.ABANDONED;
+  }
+}
+
+
+// storage.js
+.... rest of code
+
+class TaskStorage {
+..... rest of code  
+
+  load() {
+      try {
+        ..... rest of code 
+
+          let taskDate = if (taskData.dueDate) new Date(tasksData.dueDate);
+
+          if ((taskDate.getDate() - new Date().getDate()) > 7 && taskDate.status !== TaskStatus.PRIORITY) {
+              task.status = TaskStatus.ABANDONED;
+          } else {
+              task.status = taskData.status;
+          }
+
+        .... rest of code
+  }
+
+        ..... rest of code 
+
+  getAbandonedTasks() {
+    return Object.values(this.tasks).filter(task => task.isAbandoned());
+  }
+}
+
+@end
+
+***** Reflection:
+
+      $ _How did the AI prompts help you understand where and how to implement this feature?_
+      - The prompts helped to deepen my understanding of the code base. The prompts allowed me to question the AI in a constructive manner 
+        that resulted in genuine engagement and understanding. The prompts, were forced my articulate my understanding of the code and asked 
+        forced my to ask questions about the code base that I was not initially sure about. Which resulted in a structured process  to explore features, and identify patterns 
+        rather focusing on terminology, variable names and usage. 
+
+
+      $ _What aspects of the codebase are you still unsure about?_
+      - The &calculateTaskScore&  function in {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/task_priority.js}[task_priority.js], is confusing, especially since it is 
+        also used in later function &sortTasksByImportance&. 
+
+      $ _What would be your next steps to deepen your understanding?_
+      - Dig deeper in the task_priority file to understanding where the magic numbers are coming from.
