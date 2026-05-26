@@ -1,0 +1,133 @@
+* Form initial understanding:
+  $ _Write down your best guess about how the codebase is organized_
+    - Looking at the naming of the various files:
+      Going by the file names only. I am guessing that {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/app.js}[app.js] contins the bulk of the code logic. 
+      This file is responsible for control flow of the program and bringing the different parts of the files together in a single coherent code flow.
+      Furthermore,  I am thinking that {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] is responsible for collecting user input and and rendering output to standard out/in.
+      I am also thinking that {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/models.js}[models.js] contains the data structures. The data-transfer-objects of the program. It contains the structures that determine
+      the shape of a `Task` and it's related methods. I guessing that {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/storage.js}[storage.js] holds the logic for task persistence.
+      After skimming through the file. I can tell that the program persists data to the filesystem. Looking at the {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/README.md}[README.md], the program
+      is used as follows: &node cli.js create <title> [options]&. So, for  {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/task_list_merge.js}[task_list_merge.js] and {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/task_parser.js}[task_parser.js], 
+      I am guessing that the former holds logic on how to merge the different types of tasks that we can create with persisted tasks, while the later is used to parser user input 
+      provided via the terminal. For example, &node cli.js create "Complete assessment one" -d "Finish the task manager project" -p 3 -u 2026-05-25 -t "work,coding,important"&, the *task_parser.js*
+      would parse the all arguments after the `cli.js` into `Task`, `Tag`, and `Priority`, while the *task_list_merge.js* file adds/merge the new task with existing tasks. Testing of the varies APIs
+      is done in the *test* folder.
+
+  $ _List the technologies and frameworks you think it uses_
+  - The presence of a *package.json* file means that it uses *nodejs* as a runtime. Looking at the [package.json] file, 
+    other technologies or frameworks used in the project are:
+   ~ *commander*, which as far as I can tell is used to handle user input via termal through the *cli.js*
+   ~ *uuid*, for unique string identifies
+   ~ For testing, *jest* is used. Jest is a testing frameworks for javascript programs 
+
+  $ _Identify what you think are the main components_
+  - The main components of the program are the models with the class objects of structures, that describe the data requirements of an object,  cli.js for handling user input and the storage.js for persistence.
+
+
+* Apply the Project Structure Prompt:
+
+**** Use the "Understanding Project Structure and Technology Stack" prompt with AI
+     Include your initial understanding and questions
+
+       |---------- Prompt ------------|
+"""
+      I'm a junior developer who just joined this project. I've read the README but still need help understanding the project structure and technology stack.
+
+      Here's my current understanding of the project:
+        - It seems to be a task/todo manager program with optional options to add description, tagging and Priority. Majority of the code lives in app.js, since that where the different api's of the program are consolidated into a coherent program flow.
+        - It appears to use nodejs as runtime, commander for command line arguments handling and uuid for unique identifies along with jest for testing 
+        - The folder structure seems to follow a standard node project structure. 
+
+      Project structure:
+      tests/ 
+        test/task.test.js
+        test/taskManager.test.js
+        test/taskManagerIntegration.test.js
+        test/taskStorage.test.js
+        test/task_list_merge.test.js
+        test/task_parser.test.js
+        test/task_priority.test.js
+      .gitignore
+      README.md
+      app.js
+      cli.js
+      models.js
+      package.json
+      storage.js
+      task_list_merge.js
+      task_parser.js
+      task_priority.js
+
+      Key configuration files:
+      [package.json]
+        ....
+      "dependencies": {
+          "commander": "^9.0.0",
+          "uuid": "^8.3.2"
+        },
+        "devDependencies": {
+          "jest": "^29.5.0"
+        },
+
+      Could you:
+      1. Validate my understanding and correct any misconceptions
+      2. Identify additional key technologies, frameworks, and libraries used
+      3. Explain what each main folder likely contains and its purpose
+      4. Point out where the application entry points are located
+      5. Suggest 3-5 specific questions I should ask my team to deepen my understanding
+
+        I'm particularly confused about how the tests are hooked up to jest. in the test files, there is no single import from *jest*.
+      After your explanation, could you suggest a small exploration exercise I could do to verify my understanding of the project structure?
+"""
+
+* Compare the AI’s analysis with your own observations
+
+** Document your findings:
+
+   $ _Record any misconceptions you had_
+   - I said that:
+    “Majority of the code lives in app.js”, but it may or may not be true. app.js orchestrates application logic. The actual business logic is distributed across:
+      models.js
+      storage.js
+      task_parser.js
+      task_priority.js
+      task_list_merge.js
+
+   - I thought that *Jest* wasn't hooked up, because no single import from jest was in any of the test file.
+     the A.I cleared the misconception by explaining that:
+        Jest injects globals automatically. When Jest runs test files, it automatically provides:
+        describe()
+        test()
+        it()
+        expect()
+        beforeEach()
+        afterEach()
+        jest.fn()
+
+   $ _Note important entry points and architectural patterns identified_
+    - CommonJS module system
+    - File-based persistence
+    - Layered separation of concerns
+    - Unit + integration testing
+
+   $ _List the key components and their responsibilities_
+   - The components are:
+      CLI Layer
+      (cli.js)
+      ↓
+      Application Layer
+      (app.js)
+      ↓
+      Domain Logic
+      (models.js, parser, priority, merge)
+      ↓
+      Persistence Layer
+      (storage.js)
+      ↓
+      Filesystem
+      (JSON/files)
+
+
+
+
+

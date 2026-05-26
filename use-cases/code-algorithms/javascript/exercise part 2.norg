@@ -1,0 +1,109 @@
+* Imagine your team lead has asked you to add a new feature: "Task Export to CSV". You need to first understand how similar features are implemented.
+
+** Initial search:
+    Search for any existing export or file-related functionality in the codebase
+    Look for code related to data transformation or external file operations
+
+    Identify any utility functions that might be reusable for file operations
+
+** Form a hypothesis:
+   $ _Based on your initial search, write down where you think task data export functionality might belong._
+      - This functionality should be implemented within the {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/storage.js}[storage.js] file. This is because the *load method* of the  `TaskStorage` class
+        because the &load method& does a really good job of data transformation of plain strings to `Task` instances. Data export can only be part of the 
+        `TaskStorage` instance as a method. This is because, saving and exporting are somewhat simily. For example, some people my export to csv as a way to store the data rather than json files. 
+
+   $ _Note which existing components might need to be modified_
+     - The component of the program that needs to be modified is the `TaskStorage` class within the {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/storage.js}[storage.js], specifically the &load method&. 
+       The &load method& deserializes the json string contained in the `json` file to `Task` object instances, and stores then within the &this.tasks& property of the `TaskStorage` class. 
+       It is these tasks (&this.tasks&) that are exported to json in the &save method&. To facilitate exporting to `CSV`, we would need another method within the `TaskStorage` class, for example
+       &export_csv method&, and the &save method& would need to be modied a little, by accepting a flag (type) that defualts to `json` that indicates the type of file to save the `tasks` to. 
+        
+   $ _List search terms you used and files you found_
+    - JSON.parse() - this is a good indicator of Deserialization to Plain Old JavaScript Objects (POJOs) from string.
+      JSON.stringify() - this is a good indicator of Serialization to string from POJOs.
+      writeFile -  Indicates external writes. Since we want to write to a `csv` file, this was a good term to search to start with, maybe it needs small mutations to support the feature.
+
+*** Apply the Feature Location Prompt:
+**** Use the "Finding Feature Implementation Locations" prompt with AI
+       Include your search approach and findings so far
+       Ask for guidance on locating similar features or patterns
+
+
+       |---------- Prompt ------------|
+
+  """
+       I need to work on the "Task Export to CSV" in this codebase, but I'm not sure where the code for this feature lives.
+
+      My approach so far:
+       - I've searched for keywords like `JSON.parse()`, `JSON.stringify`, `writeFile` since they indicate deserialization and deserialization from/to POJOs/string along with `writeFile` since that
+         would indication filesystem writes. 
+       - I looked in the storage.js file which seemed relevant
+       - I think the feature might relate to `load method` and the `save method`, since one does deserialization and the other does serialization
+
+      Project structure:
+        tests/ 
+          test/task.test.js
+          test/taskManager.test.js
+          test/taskManagerIntegration.test.js
+          test/taskStorage.test.js
+          test/task_list_merge.test.js
+          test/task_parser.test.js
+          test/task_priority.test.js
+        .gitignore
+        README.md
+        app.js
+        cli.js
+        models.js
+        package.json
+        storage.js
+        task_list_merge.js
+        task_parser.js
+        task_priority.js
+
+
+      Based on my search, these files might be relevant, but I'm not sure:
+       `storage.js`, `task_parser.js` and `cli.js`
+
+      Can you help me:
+      1. Evaluate my search approach and suggest improvements
+      2. Identify which files and directories most likely contain the implementation for this feature
+      3. Suggest specific search terms or patterns that would be more effective
+      4. Explain what parts of the feature might be located in different areas of the codebase
+      5. Recommend a step-by-step investigation process to understand the complete feature flow
+
+      Also, what questions could I ask myself as I'm exploring the code to ensure I'm on the right track? What specific patterns should I look for to confirm I've found all the relevant parts?
+      After your guidance, could you give me a small challenge to test my understanding of how to navigate this feature's code? 
+  """
+
+
+* Document your findings:
+
+  $ _Map out where in the codebase you would implement this new feature_
+      - The feature would be implemented in:
+        {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] and {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/storage.js}[storage.js]
+
+  $ _Note related components that would be affected_
+      - The components that would change are {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js], because we need the user to opt the type of export they want,
+        `json` or `csv`, specifically the command line handling, because a new command of option `--export` would need to be added.
+        Another component to change would be s{* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/storage.js}[storage.js], 
+        to facilitate the different kinds of export. Most likely by  modifying the `TaskStorage` class by adding functionality for the different types of export types
+
+  $ _Outline a plan for how you would approach implementing the export feature_
+        *cli.js* 
+        - handle user command, flags, output path, for example:
+          @code Bash
+            todo export --csv tasks.csv
+          @end
+          ↓ 
+        *storage.js*
+        - handle retrieving tasks orchestrating export flow, and actually writing to file. For example:
+        @code JavaScript
+          const tasks = storage.load()
+          fs.writeFileSync(path, csvString)
+        @end
+
+        As seen above from the code snippets. my approach to implementing this feature is to add a new command to the cli.js file `--export` where the value can either be `json` or `csv`. 
+        then depending on the value of the argument, modify `TaskStorage`, either by adding a new methods `exportToCsv()`, `loadCsv()`, `saveJson()`, and `loadJson()`.
+        This is necessary, because the `save` and `load` methods are too generic and assume json.
+
+
