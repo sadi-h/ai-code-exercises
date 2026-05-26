@@ -1,0 +1,185 @@
+* Imagine you need to understand the Task Manager’s domain model to implement new business rules.
+
+** Extract domain model:
+
+   $ _Identify the core entity classes (Task, TaskStatus, TaskPriority, etc.)_
+   - `TaskManager`, `TaskStorage`, `TaskStatus` , `TaskPriority`, `Task`, 
+
+
+ ** Form initial understanding:
+
+    $ _Sketch a simple diagram of how you think the entities relate_
+    - Entity relation:
+
+    TaskManager - This is the application's main business/service layer.
+         ↓
+    TaskStorage - This encapsulates storage and abstracts away the persistence logic 
+         ↓
+    Task - This contains domain behavior
+         ↓
+    TaskStatus & TaskPriority - These are flags on the Task instance to indicate priority and completion status. 
+
+
+    $ _Write a brief explanation of what you think each entity represents_
+    - TaskManager is the application's main business layer. It orchastrates the program flow from user input to output.
+    - TaskStorage is encapsulates storage and abstracts away the persistence logic.
+    - Task is the domain model. The object or entity the program is focused on throughout program execution.
+    - TaskStatus hold the completion status of a task instance.
+    - TaskPriority hold the urgency/importance of a task instance.
+
+
+* Apply the Domain Understanding Prompt:
+**** Use the "Understanding Domain Models and Business Concepts" prompt with AI
+    Include your current understanding and specific questions
+    Ask the AI to test your understanding with questions
+
+
+       |---------- Prompt ------------|
+
+"""
+
+      @code JavaScript
+      // models.js
+      const { v4: uuidv4 } = require('uuid');
+
+      const TaskPriority = {
+        LOW: 1,
+        MEDIUM: 2,
+        HIGH: 3,
+        URGENT: 4
+      };
+
+      const TaskStatus = {
+        TODO: 'todo',
+        IN_PROGRESS: 'in_progress',
+        REVIEW: 'review',
+        DONE: 'done'
+      };
+
+      class Task {
+        constructor(title, description = '', priority = TaskPriority.MEDIUM, dueDate = null, tags = []) {
+          this.id = uuidv4();
+          this.title = title;
+          this.description = description;
+          this.priority = priority;
+          this.status = TaskStatus.TODO;
+          this.createdAt = new Date();
+          this.updatedAt = this.createdAt;
+          this.dueDate = dueDate;
+          this.completedAt = null;
+          this.tags = tags;
+        }
+
+        update(updates) {
+          Object.keys(updates).forEach(key => {
+            if (this.hasOwnProperty(key)) {
+              this[key] = updates[key];
+            }
+          });
+          this.updatedAt = new Date();
+        }
+
+      markAsDone() {
+        this.status = TaskStatus.DONE;
+        this.completedAt = new Date();
+        this.updatedAt = this.completedAt;
+      }
+
+      isOverdue() {
+        if (!this.dueDate) {
+          return false;
+        }
+        return this.dueDate < new Date() && this.status !== TaskStatus.DONE;
+      }
+    }
+
+    module.exports = { Task, TaskPriority, TaskStatus };
+    @end
+
+
+    I'd like you to act as a senior developer who deeply understands our codebase's domain model. I'm a junior developer trying to make sense of the business logic and domain concepts in this application.
+
+    Here's what I've found in the codebase:
+    `TaskManager`, `TaskStorage`, `TaskStatus` , `TaskPriority`, `Task`, 
+
+    Based on this code, my current understanding is:
+     - The system seems to be modeling a classic domain model pattern where logic is centered around  Task, a stateful domain entity.
+     - I think TaskManager and TaskStorage are related because TaskManager needs to first load tasks to be able to orchastrate program logic. For example, to be able to update a task or mark as complete.
+     - The `update()` appears to represent the updating logic of a single task by looping throught know properties on the task and matching it with the property the user wants to update, and only updates those properties that are know.  
+
+    Could you, as a senior developer:
+    1. Validate my current understanding, correcting any misconceptions
+    2. Help me recognize the core domain concepts represented in this code
+    3. Explain the relationships between these entities in business terms, not just technical relationships
+    4. Clarify any domain-specific terminology or patterns I might be missing
+    5. Help me connect these models to actual user-facing features or business processes
+
+    Then, please ask me 3-5 questions that would test my understanding of this domain model. These should be questions that make me think about the business logic, not just the code syntax.
+    Finally, suggest a simple diagram I could sketch to visualize these relationships that would help solidify my understanding.
+"""
+
+* Test your knowledge:
+
+  $ _Answer the questions the AI poses about the domain model_
+  - Why might markAsDone() be preferable to directly setting: task.status = DONE?
+    Having the method allows us to state modification through controlled methods. This is prevents unwanted states. For example, when a task is marked complete, the `completedAt` and `updatedAt`
+    must also be modified. Without the method, it's very easy to forget to update either of these two or both when changin the `task.status` directly. With the method, we are asured that all those properties were modified at the some time.
+
+  - Why does the system track BOTH: updatedAt & completedAt?
+    Each of these fields represent something completely differently. `updatedAt` tells us of when any state modification happened, whether `description` changes, `tags` changes, `priority` changes, while completed at only tells us when the
+    task.status field/property was modified
+
+  - Suppose the business introduces a new status: `BLOCKED`,  Which parts of the domain model would likely need to evolve?
+    TaskManager would need to evolve to handle this change. For example, just as its able to list `completed` tasks, it would evolve to `list blocked  tasks`
+
+  - Why might tags be modeled as flexible strings instead of a strict enum like TaskPriority? What business tradeoffs does that imply?
+    Modeling tags as strings allows for more flexibilty, by allowing arbitrary tags from the user. This is because it's hard to image all possible tags that a user might use for a tag  without locking them into predefined tags. 
+    The tradeoffs is that we cant validate the tags for the user, such as making sure that the tag is something that makes sense within context.  
+
+  - If overdue logic currently lives inside Task.isOverdue(), what would be the downside of moving that logic into TaskManager instead?
+    TaskManager would now be handling logic outside of its domain. It would mean that TaskManager would need to work on individual tasks, making the separation of concerns of Task and TaskManager useless, because now theres more then one way to modify task state
+
+  $ _Revise your entity diagram based on new understanding_
+  - updated entity diagram:
+
+                USER ACTIONS
+                     │
+                     ▼
+              ┌──────────────┐
+              │ TaskManager  │
+              │ (workflows)  │
+              └──────┬───────┘
+                     │ manages
+                     ▼
+              ┌──────────────┐
+              │    Task      │
+              │ (entity)     │
+              ├──────────────┤
+              │ state        │
+              │ behavior     │
+              │ lifecycle    │
+              └──────┬───────┘
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+   TaskStatus   TaskPriority    Dates
+    workflow      urgency      lifecycle
+
+                     │
+                     ▼
+              ┌──────────────┐
+              │ TaskStorage  │
+              │ persistence  │
+              └──────────────┘
+
+  $ _Create a glossary of domain terms used in the application_
+  - Glossary with domain mapping: 
+     “Create task”: new Task()
+     “Mark complete: markAsDone()
+     “Set due date: dueDate
+     “See overdue tasks: isOverdue()
+     “Filter by status”: TaskStatus
+     “Sort by urgency: TaskPriority
+     “Track completed work”: completedAt
+     “Edit task: update()
+     “Categorize tasks”: tags[]
