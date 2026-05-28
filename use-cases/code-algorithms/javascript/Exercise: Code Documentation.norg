@@ -1,0 +1,895 @@
+
+_Code I chose to document_
+
+@code JavaScript
+    const { TaskStatus } = require("./models");
+
+    function mergeTaskLists(localTasks, remoteTasks) {
+      /**
+      * Merge two task lists with conflict resolution.
+      *
+      * Args:
+      *   localTasks: Object of tasks from local source {task_id: task}
+      *   remoteTasks: Object of tasks from remote source {task_id: task}
+      *
+      * Returns:
+      *   Object with:
+      *     - mergedTasks: Combined tasks
+      *     - toCreateRemote: Tasks to be created in remote
+      *     - toUpdateRemote: Tasks to be updated in remote
+      *     - toCreateLocal: Tasks to be created in local
+      *     - toUpdateLocal: Tasks to be updated in local
+      */
+      const mergedTasks = {};
+      const toCreateRemote = {};
+      const toUpdateRemote = {};
+      const toCreateLocal = {};
+      const toUpdateLocal = {};
+
+      // Step 1: Identify all unique task IDs across both sources
+      const allTaskIds = new Set([
+        ...Object.keys(localTasks),
+        ...Object.keys(remoteTasks)
+      ]);
+
+      for (const taskId of allTaskIds) {
+        const localTask = localTasks[taskId];
+        const remoteTask = remoteTasks[taskId];
+
+        // Case 1: Task exists only locally - add to remote
+        if (localTask && !remoteTask) {
+          mergedTasks[taskId] = localTask;
+          toCreateRemote[taskId] = localTask;
+        }
+        // Case 2: Task exists only in remote - add to local
+        else if (!localTask && remoteTask) {
+          mergedTasks[taskId] = remoteTask;
+          toCreateLocal[taskId] = remoteTask;
+        }
+        // Case 3: Task exists in both - resolve conflicts
+        else {
+          const [mergedTask, shouldUpdateLocal, shouldUpdateRemote] =
+            resolveTaskConflict(localTask, remoteTask);
+
+          mergedTasks[taskId] = mergedTask;
+
+          if (shouldUpdateLocal) {
+            toUpdateLocal[taskId] = mergedTask;
+          }
+
+          if (shouldUpdateRemote) {
+            toUpdateRemote[taskId] = mergedTask;
+          }
+        }
+      }
+
+      return {
+        mergedTasks,
+        toCreateRemote,
+        toUpdateRemote,
+        toCreateLocal,
+        toUpdateLocal
+      };
+    }
+
+    function resolveTaskConflict(localTask, remoteTask) {
+      /**
+      * Resolve conflicts between two versions of the same task.
+      *
+      * Returns:
+      *   [mergedTask, shouldUpdateLocal, shouldUpdateRemote]
+      */
+      // Make a copy of the local task to use as our base
+      const mergedTask = {...localTask};
+
+      // Track if we need to update either source
+      let shouldUpdateLocal = false;
+      let shouldUpdateRemote = false;
+
+      // Most recent update wins for most fields
+      const localDate = new Date(localTask.updatedAt);
+      const remoteDate = new Date(remoteTask.updatedAt);
+
+      if (remoteDate > localDate) {
+        // Remote task is newer, update local fields
+        mergedTask.title = remoteTask.title;
+        mergedTask.description = remoteTask.description;
+        mergedTask.priority = remoteTask.priority;
+        mergedTask.dueDate = remoteTask.dueDate;
+        shouldUpdateLocal = true;
+      } else {
+        // Local task is newer or same age, update remote fields
+        shouldUpdateRemote = true;
+      }
+
+      // Special handling for completed status - completed wins over not completed
+      if (remoteTask.status === TaskStatus.DONE && localTask.status !== TaskStatus.DONE) {
+        mergedTask.status = TaskStatus.DONE;
+        mergedTask.completedAt = remoteTask.completedAt;
+        shouldUpdateLocal = true;
+      } else if (localTask.status === TaskStatus.DONE && remoteTask.status !== TaskStatus.DONE) {
+        // Keep local status (already in mergedTask)
+        shouldUpdateRemote = true;
+      } else if (remoteTask.status !== localTask.status) {
+        // Different non-completed status - most recent wins
+        if (remoteDate > localDate) {
+          mergedTask.status = remoteTask.status;
+          shouldUpdateLocal = true;
+        } else {
+          // Keep local status (already in mergedTask)
+          shouldUpdateRemote = true;
+        }
+      }
+
+      // Merge tags from both sources (union)
+      const allTags = [...new Set([...localTask.tags, ...remoteTask.tags])];
+      mergedTask.tags = allTags;
+
+      // If tags changed in either source, update both
+      if (!arraysEqual(mergedTask.tags, localTask.tags)) {
+        shouldUpdateLocal = true;
+      }
+      if (!arraysEqual(mergedTask.tags, remoteTask.tags)) {
+        shouldUpdateRemote = true;
+      }
+
+      // Update the timestamp to latest
+      mergedTask.updatedAt = localDate > remoteDate ? localTask.updatedAt : remoteTask.updatedAt;
+
+      return [mergedTask, shouldUpdateLocal, shouldUpdateRemote];
+    }
+
+    // Helper function to compare arrays
+    function arraysEqual(a, b) {
+      if (a.length !== b.length) return false;
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+      return sortedA.every((val, i) => val === sortedB[i]);
+    }
+
+    // Export functions for testing
+    module.exports = { mergeTaskLists, resolveTaskConflict, arraysEqual };
+@end
+
+----____________________________
+_The documentation generated using Prompt 1_
+
+@code JsDoc
+/**
+ * Merges two collections of tasks from local and remote sources into a single
+ * synchronized task set while determining which tasks need to be created or
+ * updated in each source.
+ *
+ * The merge process performs conflict resolution for tasks that exist in both
+ * collections by delegating to {@link resolveTaskConflict}. It also identifies:
+ *
+ * - Tasks that only exist locally and should be created remotely
+ * - Tasks that only exist remotely and should be created locally
+ * - Tasks that exist in both sources but require updates after conflict resolution
+ *
+ * Conflict resolution rules include:
+ * - Most recently updated task fields take precedence
+ * - Completed tasks (`TaskStatus.DONE`) always win over incomplete states
+ * - Tags are merged using a union operation
+ * - Synchronization update flags are generated for each source as needed
+ *
+ * @function mergeTaskLists
+ *
+ * @param {Object.<string, Object>} localTasks
+ * A map of locally stored task objects keyed by task ID.
+ *
+ * @param {Object.<string, Object>} remoteTasks
+ * A map of remotely stored task objects keyed by task ID.
+ *
+ * @param {string} localTasks[].id
+ * Unique identifier for the task.
+ *
+ * @param {string} localTasks[].title
+ * Human-readable task title.
+ *
+ * @param {string} [localTasks[].description]
+ * Optional task description or notes.
+ *
+ * @param {string} localTasks[].status
+ * Current task status value.
+ *
+ * @param {string|number} [localTasks[].priority]
+ * Task priority level.
+ *
+ * @param {string|null} [localTasks[].dueDate]
+ * Optional due date in a parseable date format.
+ *
+ * @param {string[]} localTasks[].tags
+ * Array of task tags or categories.
+ *
+ * @param {string} localTasks[].updatedAt
+ * ISO timestamp representing the last modification time.
+ *
+ * @param {string|null} [localTasks[].completedAt]
+ * ISO timestamp indicating when the task was completed.
+ *
+ * @returns {{
+ *   mergedTasks: Object.<string, Object>,
+ *   toCreateRemote: Object.<string, Object>,
+ *   toUpdateRemote: Object.<string, Object>,
+ *   toCreateLocal: Object.<string, Object>,
+ *   toUpdateLocal: Object.<string, Object>
+ * }}
+ * An object containing the merged task state and synchronization operations.
+ *
+ * @returns {Object.<string, Object>} returns.mergedTasks
+ * Fully merged collection of all tasks after conflict resolution.
+ *
+ * @returns {Object.<string, Object>} returns.toCreateRemote
+ * Tasks that exist locally but must be created in the remote source.
+ *
+ * @returns {Object.<string, Object>} returns.toUpdateRemote
+ * Tasks that already exist remotely but require updates.
+ *
+ * @returns {Object.<string, Object>} returns.toCreateLocal
+ * Tasks that exist remotely but must be created locally.
+ *
+ * @returns {Object.<string, Object>} returns.toUpdateLocal
+ * Tasks that already exist locally but require updates.
+ *
+ * @throws {TypeError}
+ * Thrown if either `localTasks` or `remoteTasks` is `null`, `undefined`,
+ * or not a valid object.
+ *
+ * @throws {RangeError}
+ * May be thrown indirectly if task date fields contain invalid date values
+ * that cannot be parsed by the `Date` constructor during conflict resolution.
+ *
+ * @example
+ * const localTasks = {
+ *   "task-1": {
+ *     id: "task-1",
+ *     title: "Buy groceries",
+ *     status: "IN_PROGRESS",
+ *     tags: ["shopping"],
+ *     updatedAt: "2026-05-20T10:00:00Z"
+ *   }
+ * };
+ *
+ * const remoteTasks = {
+ *   "task-2": {
+ *     id: "task-2",
+ *     title: "Finish report",
+ *     status: "DONE",
+ *     tags: ["work"],
+ *     updatedAt: "2026-05-21T08:30:00Z"
+ *   }
+ * };
+ *
+ * const result = mergeTaskLists(localTasks, remoteTasks);
+ *
+ * console.log(result.mergedTasks);
+ * console.log(result.toCreateRemote);
+ * console.log(result.toCreateLocal);
+ *
+ * @example
+ * // Resolving conflicts between matching task IDs
+ * const localTasks = {
+ *   "task-1": {
+ *     id: "task-1",
+ *     title: "Write documentation",
+ *     status: "IN_PROGRESS",
+ *     tags: ["docs"],
+ *     updatedAt: "2026-05-20T09:00:00Z"
+ *   }
+ * };
+ *
+ * const remoteTasks = {
+ *   "task-1": {
+ *     id: "task-1",
+ *     title: "Write API documentation",
+ *     status: "DONE",
+ *     tags: ["docs", "api"],
+ *     updatedAt: "2026-05-21T09:00:00Z"
+ *   }
+ * };
+ *
+ * const result = mergeTaskLists(localTasks, remoteTasks);
+ *
+ * // Remote version wins due to newer timestamp and completed status
+ * console.log(result.mergedTasks["task-1"]);
+ *
+ * @note
+ * Task IDs are assumed to be unique across both collections.
+ *
+ * @note
+ * Tags are merged using a set union operation, preventing duplicate tags.
+ *
+ * @note
+ * This function does not mutate the original task collection objects directly,
+ * though merged task references may still share nested object references if
+ * present inside task payloads.
+ *
+ * @note
+ * Timestamp comparisons rely on the JavaScript `Date` constructor. Invalid or
+ * inconsistent timestamp formats may produce unreliable merge behavior.
+ *
+ * @note
+ * When both task versions have the same `updatedAt` timestamp, the local task
+ * version is treated as authoritative for non-status fields.
+ */
+@end
+---____________________________
+____________________________
+The insights or improvements you identified using Prompt 2
+____________________________
+@code JavaScript
+/**
+
+* @section Potential Improvements
+  */
+
+/**
+
+* @subsection Improvement 1 - Add Input Validation
+*
+* Current implementation:
+*
+* ```js
+  ```
+* localTask.tags
+* ```
+  ```
+*
+* Safer alternative:
+*
+* ```js
+  ```
+* const localTags = localTask.tags || [];
+* ```
+  ```
+
+*/
+
+/**
+
+* @subsection Improvement 2 - Replace Tuple Return Values
+*
+* Current:
+*
+* ```js
+  ```
+* return [mergedTask, shouldUpdateLocal, shouldUpdateRemote];
+* ```
+  ```
+*
+* More readable:
+*
+* ```js
+  ```
+* return {
+* mergedTask,
+* shouldUpdateLocal,
+* shouldUpdateRemote
+* };
+* ```
+  ```
+
+*/
+
+/**
+
+* @subsection Improvement 3 - Centralize Merge Rules
+*
+* Merge policy is currently embedded directly in conditionals.
+*
+* Could extract reusable helpers:
+*
+* ```js
+  ```
+* mergeField(fieldName)
+* ```
+  ```
+
+*/
+
+/**
+
+* @subsection Improvement 4 - Reduce Repeated Flag Assignments
+*
+* Repeated patterns:
+*
+* ```js
+  ```
+* shouldUpdateLocal = true;
+* ```
+  ```
+*
+* could be simplified with helper utilities.
+  */
+
+/**
+
+* @subsection Improvement 5 - Defensive Date Handling
+*
+* Safer parsing:
+*
+* ```js
+  ```
+* const localDate = Date.parse(localTask.updatedAt);
+* ```
+  ```
+*
+* combined with validation checks.
+  */
+
+/**
+
+* @subsection Improvement 6 - Preserve Immutable Merge Semantics
+*
+* Current implementation uses shallow copies:
+*
+* ```js
+  ```
+* {...localTask}
+* ```
+  ```
+*
+* Nested objects may still share references.
+  */
+
+/**
+
+* @subsection Improvement 7 - Clarify Merge Policy Documentation
+*
+* The algorithm combines multiple merge strategies:
+*
+* | Field Type | Merge Strategy |
+* |---|---|
+* | Standard fields | Last-write-wins |
+* | Completion status | DONE always wins |
+* | Tags | Union merge |
+*
+* Explicit documentation would improve maintainability.
+  */
+@end
+
+____________________________
+A final combined documentation version
+____________________________
+@code JavaScript
+    const { TaskStatus } = require("./models");
+
+/**
+ * Merges two collections of tasks from local and remote sources into a single
+ * synchronized task set while determining which tasks need to be created or
+ * updated in each source.
+ *
+ * The merge process performs conflict resolution for tasks that exist in both
+ * collections by delegating to {@link resolveTaskConflict}. It also identifies:
+ *
+ * - Tasks that only exist locally and should be created remotely
+ * - Tasks that only exist remotely and should be created locally
+ * - Tasks that exist in both sources but require updates after conflict resolution
+ *
+ * Conflict resolution rules include:
+ * - Most recently updated task fields take precedence
+ * - Completed tasks (`TaskStatus.DONE`) always win over incomplete states
+ * - Tags are merged using a union operation
+ * - Synchronization update flags are generated for each source as needed
+ *
+ * @function mergeTaskLists
+ *
+ * @param {Object.<string, Object>} localTasks
+ * A map of locally stored task objects keyed by task ID.
+ *
+ * @param {Object.<string, Object>} remoteTasks
+ * A map of remotely stored task objects keyed by task ID.
+ *
+ * @param {string} localTasks[].id
+ * Unique identifier for the task.
+ *
+ * @param {string} localTasks[].title
+ * Human-readable task title.
+ *
+ * @param {string} [localTasks[].description]
+ * Optional task description or notes.
+ *
+ * @param {string} localTasks[].status
+ * Current task status value.
+ *
+ * @param {string|number} [localTasks[].priority]
+ * Task priority level.
+ *
+ * @param {string|null} [localTasks[].dueDate]
+ * Optional due date in a parseable date format.
+ *
+ * @param {string[]} localTasks[].tags
+ * Array of task tags or categories.
+ *
+ * @param {string} localTasks[].updatedAt
+ * ISO timestamp representing the last modification time.
+ *
+ * @param {string|null} [localTasks[].completedAt]
+ * ISO timestamp indicating when the task was completed.
+ *
+ * @returns {{
+ *   mergedTasks: Object.<string, Object>,
+ *   toCreateRemote: Object.<string, Object>,
+ *   toUpdateRemote: Object.<string, Object>,
+ *   toCreateLocal: Object.<string, Object>,
+ *   toUpdateLocal: Object.<string, Object>
+ * }}
+ * An object containing the merged task state and synchronization operations.
+ *
+ * @returns {Object.<string, Object>} returns.mergedTasks
+ * Fully merged collection of all tasks after conflict resolution.
+ *
+ * @returns {Object.<string, Object>} returns.toCreateRemote
+ * Tasks that exist locally but must be created in the remote source.
+ *
+ * @returns {Object.<string, Object>} returns.toUpdateRemote
+ * Tasks that already exist remotely but require updates.
+ *
+ * @returns {Object.<string, Object>} returns.toCreateLocal
+ * Tasks that exist remotely but must be created locally.
+ *
+ * @returns {Object.<string, Object>} returns.toUpdateLocal
+ * Tasks that already exist locally but require updates.
+ *
+ * @throws {TypeError}
+ * Thrown if either `localTasks` or `remoteTasks` is `null`, `undefined`,
+ * or not a valid object.
+ *
+ * @throws {RangeError}
+ * May be thrown indirectly if task date fields contain invalid date values
+ * that cannot be parsed by the `Date` constructor during conflict resolution.
+ *
+ * @example
+ * const localTasks = {
+ *   "task-1": {
+ *     id: "task-1",
+ *     title: "Buy groceries",
+ *     status: "IN_PROGRESS",
+ *     tags: ["shopping"],
+ *     updatedAt: "2026-05-20T10:00:00Z"
+ *   }
+ * };
+ *
+ * const remoteTasks = {
+ *   "task-2": {
+ *     id: "task-2",
+ *     title: "Finish report",
+ *     status: "DONE",
+ *     tags: ["work"],
+ *     updatedAt: "2026-05-21T08:30:00Z"
+ *   }
+ * };
+ *
+ * const result = mergeTaskLists(localTasks, remoteTasks);
+ *
+ * console.log(result.mergedTasks);
+ * console.log(result.toCreateRemote);
+ * console.log(result.toCreateLocal);
+ *
+ * @example
+ * // Resolving conflicts between matching task IDs
+ * const localTasks = {
+ *   "task-1": {
+ *     id: "task-1",
+ *     title: "Write documentation",
+ *     status: "IN_PROGRESS",
+ *     tags: ["docs"],
+ *     updatedAt: "2026-05-20T09:00:00Z"
+ *   }
+ * };
+ *
+ * const remoteTasks = {
+ *   "task-1": {
+ *     id: "task-1",
+ *     title: "Write API documentation",
+ *     status: "DONE",
+ *     tags: ["docs", "api"],
+ *     updatedAt: "2026-05-21T09:00:00Z"
+ *   }
+ * };
+ *
+ * const result = mergeTaskLists(localTasks, remoteTasks);
+ *
+ * // Remote version wins due to newer timestamp and completed status
+ * console.log(result.mergedTasks["task-1"]);
+ *
+ * @note
+ * Task IDs are assumed to be unique across both collections.
+ *
+ * @note
+ * Tags are merged using a set union operation, preventing duplicate tags.
+ *
+ * @note
+ * This function does not mutate the original task collection objects directly,
+ * though merged task references may still share nested object references if
+ * present inside task payloads.
+ *
+ * @note
+ * Timestamp comparisons rely on the JavaScript `Date` constructor. Invalid or
+ * inconsistent timestamp formats may produce unreliable merge behavior.
+ *
+ * @note
+ * When both task versions have the same `updatedAt` timestamp, the local task
+ * version is treated as authoritative for non-status fields.
+ */
+    function mergeTaskLists(localTasks, remoteTasks) {
+      const mergedTasks = {};
+      const toCreateRemote = {};
+      const toUpdateRemote = {};
+      const toCreateLocal = {};
+      const toUpdateLocal = {};
+
+      // Step 1: Identify all unique task IDs across both sources
+      const allTaskIds = new Set([
+        ...Object.keys(localTasks),
+        ...Object.keys(remoteTasks)
+      ]);
+
+      for (const taskId of allTaskIds) {
+        const localTask = localTasks[taskId];
+        const remoteTask = remoteTasks[taskId];
+
+        // Case 1: Task exists only locally - add to remote
+        if (localTask && !remoteTask) {
+          mergedTasks[taskId] = localTask;
+          toCreateRemote[taskId] = localTask;
+        }
+        // Case 2: Task exists only in remote - add to local
+        else if (!localTask && remoteTask) {
+          mergedTasks[taskId] = remoteTask;
+          toCreateLocal[taskId] = remoteTask;
+        }
+        // Case 3: Task exists in both - resolve conflicts
+        else {
+          const [mergedTask, shouldUpdateLocal, shouldUpdateRemote] =
+            resolveTaskConflict(localTask, remoteTask);
+
+          mergedTasks[taskId] = mergedTask;
+
+          if (shouldUpdateLocal) {
+            toUpdateLocal[taskId] = mergedTask;
+          }
+
+          if (shouldUpdateRemote) {
+            toUpdateRemote[taskId] = mergedTask;
+          }
+        }
+      }
+
+      return {
+        mergedTasks,
+        toCreateRemote,
+        toUpdateRemote,
+        toCreateLocal,
+        toUpdateLocal
+      };
+    }
+
+    /**
+    * Resolve synchronization conflicts between two versions of the same task.
+    *
+    * This function merges task fields according to synchronization rules:
+    * - Most recently updated task wins for standard fields.
+    * - Completed tasks (`TaskStatus.DONE`) override incomplete states.
+    * - Tags are merged as a union of unique values.
+    * - Synchronization flags indicate which source requires updating.
+    *
+    * The local task is used as the base object for the merged result.
+    *
+    * @function resolveTaskConflict
+    *
+    * @param {Task} localTask
+    * Task object from the local source.
+    *
+    * @param {Task} remoteTask
+    * Task object from the remote source.
+    *
+    * @returns {[Task, boolean, boolean]}
+    * Tuple containing:
+    * 1. `mergedTask` - The merged task object
+    * 2. `shouldUpdateLocal` - Whether the local source requires updating
+    * 3. `shouldUpdateRemote` - Whether the remote source requires updating
+    *
+    * @throws {TypeError}
+    * May throw if:
+    * - either task is `null` or `undefined`
+    * - `updatedAt` is missing or invalid
+    * - `tags` is not an array
+    *
+    * @example
+    * const [mergedTask, updateLocal, updateRemote] =
+    *   resolveTaskConflict(localTask, remoteTask);
+    *
+    * console.log(mergedTask.status);
+    * console.log(updateLocal);
+    * console.log(updateRemote);
+    *
+    * @note
+    * Timestamp comparison uses JavaScript `Date` parsing. Invalid timestamps may
+    * produce unreliable comparisons.
+    *
+    * @note
+    * The merged task inherits from the local task object first, then selectively
+    * overrides fields based on merge rules.
+    *
+    * @note
+    * Tag order is not guaranteed because arrays are merged using `Set`.
+    */
+    function resolveTaskConflict(localTask, remoteTask) {
+      // Make a copy of the local task to use as our base
+      const mergedTask = { ...localTask };
+
+      // Track if we need to update either source
+      let shouldUpdateLocal = false;
+      let shouldUpdateRemote = false;
+
+      // Most recent update wins for most fields
+      const localDate = new Date(localTask.updatedAt);
+      const remoteDate = new Date(remoteTask.updatedAt);
+
+      if (remoteDate > localDate) {
+        // Remote task is newer, update local fields
+        mergedTask.title = remoteTask.title;
+        mergedTask.description = remoteTask.description;
+        mergedTask.priority = remoteTask.priority;
+        mergedTask.dueDate = remoteTask.dueDate;
+        shouldUpdateLocal = true;
+      } else {
+        // Local task is newer or same age, update remote fields
+        shouldUpdateRemote = true;
+      }
+
+      // Special handling for completed status - completed wins over not completed
+      if (
+        remoteTask.status === TaskStatus.DONE &&
+        localTask.status !== TaskStatus.DONE
+      ) {
+        mergedTask.status = TaskStatus.DONE;
+        mergedTask.completedAt = remoteTask.completedAt;
+        shouldUpdateLocal = true;
+      } else if (
+        localTask.status === TaskStatus.DONE &&
+        remoteTask.status !== TaskStatus.DONE
+      ) {
+        shouldUpdateRemote = true;
+      } else if (remoteTask.status !== localTask.status) {
+        // Different non-completed status - most recent wins
+        if (remoteDate > localDate) {
+          mergedTask.status = remoteTask.status;
+          shouldUpdateLocal = true;
+        } else {
+          shouldUpdateRemote = true;
+        }
+      }
+
+      // Merge tags from both sources (union)
+      const allTags = [...new Set([...localTask.tags, ...remoteTask.tags])];
+      mergedTask.tags = allTags;
+
+      // If tags changed in either source, update both
+      if (!arraysEqual(mergedTask.tags, localTask.tags)) {
+        shouldUpdateLocal = true;
+      }
+
+      if (!arraysEqual(mergedTask.tags, remoteTask.tags)) {
+        shouldUpdateRemote = true;
+      }
+
+      // Update the timestamp to latest
+      mergedTask.updatedAt =
+        localDate > remoteDate
+          ? localTask.updatedAt
+          : remoteTask.updatedAt;
+
+      return [mergedTask, shouldUpdateLocal, shouldUpdateRemote];
+    }
+
+    /**
+    * Compare two arrays for equality regardless of element order.
+    *
+    * Arrays are considered equal if:
+    * - they contain the same number of elements
+    * - all corresponding sorted values are strictly equal
+    *
+    * This function performs a shallow comparison only.
+    *
+    * @function arraysEqual
+    *
+    * @param {Array<*>} a
+    * First array to compare.
+    *
+    * @param {Array<*>} b
+    * Second array to compare.
+    *
+    * @returns {boolean}
+    * `true` if arrays contain the same values in any order;
+    * otherwise `false`.
+    *
+    * @throws {TypeError}
+    * May throw if either argument is not an array.
+    *
+    * @example
+    * arraysEqual(["a", "b"], ["b", "a"]);
+    * // => true
+    *
+    * @example
+    * arraysEqual([1, 2], [1, 2, 3]);
+    * // => false
+    *
+    * @note
+    * Comparison uses strict equality (`===`).
+    *
+    * @note
+    * Object elements are compared by reference, not by deep equality.
+    *
+    * @note
+    * Sorting mutates temporary copies only; original arrays are not modified.
+    */
+    function arraysEqual(a, b) {
+      if (a.length !== b.length) return false;
+
+      const sortedA = [...a].sort();
+      const sortedB = [...b].sort();
+
+      return sortedA.every((val, i) => val === sortedB[i]);
+    }
+
+    /**
+    * @typedef {Object} Task
+    *
+    * @property {string} id
+    * Unique identifier for the task.
+    *
+    * @property {string} title
+    * Human-readable task title.
+    *
+    * @property {string} [description]
+    * Optional task description or notes.
+    *
+    * @property {string} status
+    * Current task status.
+    *
+    * @property {string} [priority]
+    * Priority level assigned to the task.
+    *
+    * @property {string|null} [dueDate]
+    * ISO-8601 due date string or `null`.
+    *
+    * @property {string[]} tags
+    * List of task tags.
+    *
+    * @property {string} updatedAt
+    * ISO-8601 timestamp representing last modification time.
+    *
+    * @property {string|null} [completedAt]
+    * ISO-8601 timestamp for task completion.
+    */
+
+    /**
+    * @typedef {Object} MergeResult
+    *
+    * @property {Object.<string, Task>} mergedTasks
+    * Final merged task collection.
+    *
+    * @property {Object.<string, Task>} toCreateRemote
+    * Tasks that should be created remotely.
+    *
+    * @property {Object.<string, Task>} toUpdateRemote
+    * Tasks that should be updated remotely.
+    *
+    * @property {Object.<string, Task>} toCreateLocal
+    * Tasks that should be created locally.
+    *
+    * @property {Object.<string, Task>} toUpdateLocal
+    * Tasks that should be updated locally.
+    */
+
+    // Export functions for testing
+    module.exports = {
+      mergeTaskLists,
+      resolveTaskConflict,
+      arraysEqual
+    };
+
+@end
