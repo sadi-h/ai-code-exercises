@@ -1,0 +1,21 @@
+_____
+Document your optimization process, results, and key learnings
+_____
+- Database performance is mostly about reducing unnecessary work.
+    That means:
+    - scan fewer rows,
+    - avoid repeated queries,
+    - use indexes,
+    - reduce data transfer,
+    - aggregate efficiently.
+
+- I changed the repeated sub query to use CTEs. This is because PostgreSQL performs much better with: JOINs, GROUP BY and CTEs.
+    - The next optimization I added was pagination. This optimization is better because its a huge reduction in:
+        - CPU
+        - memory
+        - sorting
+        - JSON aggregation
+        - network transfer
+
+- I learned that looking out for N+1 Database queries. They can easily creep into code like this, because of the many joins and sub- queries.
+  The other thing that I learned is to rather use common table expression (CTEs) over sub queries, since db has to evaulate that subquery for every row result.
