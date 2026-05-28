@@ -1,0 +1,1359 @@
+
+                        $ _The original API endpoint code I chose to document_
+
+
+@code rust
+    async fn stream_audio(
+        _claims: Access,
+        Path(metadata_id): Path<Uuid>,
+        headers: HeaderMap,
+    ) -> Result<impl IntoResponse, ApiError> {
+        let metadata = db_client()?
+            .get_audio_metadata(metadata_id)
+            .await?
+            .ok_or_else(|| ApiError::not_found("metadata not found"))?;
+
+        // directory triversal not possible since the file_name was cleaned when metadata was being added
+        // also, the use of metadata_id to get chunks instead of accepting file paths mitigates risk
+        let path = std::path::Path::new(&metadata.file_name);
+
+        let mut file = match fs::File::open(&path).await {
+            Ok(file) => file,
+            Err(e) => return Err(ApiError::not_found(e.to_string())),
+        };
+
+        let file_size = match file.metadata().await {
+            Ok(metadata) => metadata.len(),
+            Err(e) => return Err(ApiError::internal(e.to_string())),
+        };
+
+        let range = if let Some(range_header) = headers.get(axum::http::header::RANGE) {
+            match range_header.to_str() {
+                Ok(value) => match parse_range_header(value, file_size) {
+                    Some(range) => range,
+                    None => {
+                        let mut resp =
+                            ApiError::new(status::StatusCode::RANGE_NOT_SATISFIABLE, "Invalid range")
+                                .into_response();
+                        resp.headers_mut().insert(
+                            http::header::CONTENT_RANGE,
+                            http::HeaderValue::from_str(&format!("bytes */{file_size}")).unwrap(),
+                        );
+                        return Ok(resp);
+                    }
+                },
+                Err(e) => return Err(ApiError::bad_request(e.to_string())),
+            }
+        } else {
+            return Err(ApiError::bad_request("Range header required"));
+        };
+
+        let ops::Range { start, end } = range;
+
+      let length = (end - start) + 1;
+
+      if length > MAX_RANGE_SIZE {
+          return Err(ApiError::bad_request(format!(
+              "Range error: range can not exceed {MAX_RANGE_SIZE} bytes"
+          )));
+      }
+
+      if file.seek(std::io::SeekFrom::Start(start)).await.is_err() {
+          return Err(ApiError::new(
+              status::StatusCode::RANGE_NOT_SATISFIABLE,
+              "Seek error",
+          ));
+      }
+
+      let content_range = format!("bytes {start}-{end}/{file_size}");
+
+      let stream = stream_chunk(file, length);
+
+      let resp = axum::response::Response::builder()
+          .status(status::StatusCode::PARTIAL_CONTENT)
+          .header(http::header::CONTENT_TYPE, "audio/mpeg")
+          .header(http::header::ACCEPT_RANGES, "bytes")
+          .header(http::header::CONTENT_RANGE, content_range)
+          .header(http::header::CONTENT_LENGTH, length)
+          .body(Body::from_stream(stream))
+          .unwrap();
+      Ok(resp)
+  }
+@end
+
+
+____________
+                    $ _The comprehensive endpoint documentation generated using Prompt 1_
+
+
+@code markdown
+
+# Stream Audio Endpoint
+
+## Overview
+
+Streams a portion of an audio file associated with a metadata record using HTTP byte-range requests.
+
+This endpoint is designed for efficient audio streaming and playback by supporting partial content delivery (`206 Partial Content`). Clients must provide a valid `Range` header specifying the byte range to retrieve.
+
+The endpoint:
+
+* Authenticates the request using a Bearer access token
+* Retrieves audio metadata using the provided `metadata_id`
+* Streams only the requested byte range
+* Supports resumable and chunked audio playback
+* Rejects invalid or excessively large byte ranges
+
+---
+
+# Endpoint
+
+```http
+GET /stream/{metadata_id} HTTP/1.1
+```
+
+## Base URL
+
+```text
+http://127.0.0.1:8000
+```
+
+---
+
+# Authentication
+
+This endpoint requires Bearer token authentication.
+
+## Required Header
+
+```http
+Authorization: Bearer <your_access_token>
+```
+
+Requests without valid authentication will be rejected.
+
+---
+
+# Request Parameters
+
+## Path Parameters
+
+| Name          | Type   | Required | Description                                              |
+| ------------- | ------ | -------- | -------------------------------------------------------- |
+| `metadata_id` | `UUID` | Yes      | Unique identifier of the audio metadata record to stream |
+
+### Example
+
+```text
+/stream/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+## Headers
+
+| Header          | Required | Description          |
+| --------------- | -------- | -------------------- |
+| `Authorization` | Yes      | Bearer access token  |
+| `Range`         | Yes      | Byte range to stream |
+
+### Range Header Format
+
+```http
+Range: bytes=<start>-<end>
+```
+
+### Example
+
+```http
+Range: bytes=0-1048575
+```
+
+This requests the first 1 MB of the audio file.
+
+---
+
+# Request Body
+
+This endpoint does not accept a request body.
+
+---
+
+# Successful Response
+
+## Status Code
+
+```http
+206 Partial Content
+```
+
+Returned when the requested byte range is valid and streaming begins successfully.
+
+---
+
+# Response Headers
+
+| Header           | Description                                  |
+| ---------------- | -------------------------------------------- |
+| `Content-Type`   | MIME type of the audio stream (`audio/mpeg`) |
+| `Accept-Ranges`  | Indicates support for byte ranges            |
+| `Content-Range`  | Indicates the served byte range              |
+| `Content-Length` | Size of the streamed chunk in bytes          |
+
+---
+
+# Response Format
+
+The response body contains raw binary audio data.
+
+## Example Response Headers
+
+```http
+HTTP/1.1 206 Partial Content
+Content-Type: audio/mpeg
+Accept-Ranges: bytes
+Content-Range: bytes 0-1048575/53218492
+Content-Length: 1048576
+```
+
+## Example Response Body
+
+```binary
+<streamed audio bytes>
+```
+
+---
+
+# Error Responses
+
+## 400 Bad Request
+
+Returned when:
+
+* The `Range` header is missing
+* The `Range` header is malformed
+* The requested range exceeds the maximum allowed size
+
+### Example Response
+
+```json
+{
+  "error": "Range header required"
+}
+```
+
+### Example Invalid Range
+
+```json
+{
+  "error": "Range error: range can not exceed 10485760 bytes"
+}
+```
+
+---
+
+## 401 Unauthorized
+
+Returned when the access token is missing, invalid, or expired.
+
+### Example Response
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+---
+
+## 404 Not Found
+
+Returned when:
+
+* The metadata record does not exist
+* The audio file cannot be found on disk
+
+### Example Response
+
+```json
+{
+  "error": "metadata not found"
+}
+```
+
+### Example Missing File
+
+```json
+{
+  "error": "No such file or directory"
+}
+```
+
+---
+
+## 416 Range Not Satisfiable
+
+Returned when the provided byte range is invalid or outside the file bounds.
+
+### Example Response
+
+```http
+HTTP/1.1 416 Range Not Satisfiable
+Content-Range: bytes */53218492
+```
+
+```json
+{
+  "error": "Invalid range"
+}
+```
+
+---
+
+## 500 Internal Server Error
+
+Returned when the server fails to retrieve file metadata or encounters an unexpected internal error.
+
+### Example Response
+
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+---
+
+# Example Requests
+
+## Example 1 — Stream Initial Audio Chunk
+
+### Request
+
+```http
+GET /stream/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
+Host: 127.0.0.1:8000
+Authorization: Bearer eyJhbGciOi...
+Range: bytes=0-1048575
+```
+
+### Response
+
+```http
+HTTP/1.1 206 Partial Content
+Content-Type: audio/mpeg
+Accept-Ranges: bytes
+Content-Range: bytes 0-1048575/53218492
+Content-Length: 1048576
+```
+
+```binary
+<audio stream data>
+```
+
+---
+
+## Example 2 — Resume Playback From Offset
+
+### Request
+
+```http
+GET /stream/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
+Host: 127.0.0.1:8000
+Authorization: Bearer eyJhbGciOi...
+Range: bytes=1048576-2097151
+```
+
+### Response
+
+```http
+HTTP/1.1 206 Partial Content
+Content-Type: audio/mpeg
+Accept-Ranges: bytes
+Content-Range: bytes 1048576-2097151/53218492
+Content-Length: 1048576
+```
+
+```binary
+<audio stream data>
+```
+
+---
+
+# Special Considerations
+
+## Range Header Is Mandatory
+
+Requests without a `Range` header are rejected with:
+
+```http
+400 Bad Request
+```
+
+---
+
+## Maximum Range Size
+
+The server enforces a maximum allowed byte range size using `MAX_RANGE_SIZE`.
+
+If the requested range exceeds this limit, the request is rejected.
+
+This helps:
+
+* Prevent excessive memory usage
+* Reduce bandwidth abuse
+* Improve streaming stability
+
+---
+
+## Partial Content Streaming
+
+The endpoint only streams the requested byte segment instead of the entire file.
+
+Benefits include:
+
+* Efficient audio playback
+* Reduced bandwidth consumption
+* Support for seeking and resuming playback
+* Better scalability for large files
+
+---
+
+## File Security
+
+The implementation mitigates directory traversal risks by:
+
+* Using sanitized file names
+* Resolving files through metadata IDs rather than arbitrary file paths
+
+---
+
+## Supported Media Type
+
+Currently, the endpoint responds with:
+
+```http
+Content-Type: audio/mpeg
+```
+
+Clients should expect MP3-compatible audio streams.
+
+---
+
+# Notes for Client Implementations
+
+* Always send a valid `Range` header
+* Handle `206 Partial Content` responses correctly
+* Use `Content-Range` to determine stream progress
+* Support retry/resume logic for interrupted playback
+* Handle `416 Range Not Satisfiable` gracefully when seeking beyond file bounds
+
+@end
+
+
+
+
+
+____________
+                        $ _The converted documentation format created using Prompt 2_
+
+
+@code yaml
+
+openapi: 3.1.0
+
+info:
+  title: Audio Streaming API
+  version: 1.0.0
+  description: |
+    API endpoint for streaming audio files using HTTP byte-range requests.
+
+    This endpoint supports:
+      - Partial content delivery
+      - Resumable playback
+      - Chunked audio streaming
+      - Bearer token authentication
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development server
+
+tags:
+  - name: Streaming
+    description: Audio streaming operations
+
+paths:
+  /stream/{metadata_id}:
+    get:
+      tags:
+        - Streaming
+
+      summary: Stream audio file content
+      description: |
+        Streams a portion of an audio file associated with a metadata record.
+
+        Clients must provide a valid HTTP `Range` header specifying the byte
+        range to retrieve.
+
+        The endpoint supports:
+          - Partial content streaming
+          - Resumable playback
+          - Efficient bandwidth usage
+          - Chunked streaming
+
+      operationId: streamAudio
+
+      security:
+        - bearerAuth: []
+
+      parameters:
+        - name: metadata_id
+          in: path
+          required: true
+          description: Unique identifier of the audio metadata record
+          schema:
+            type: string
+            format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+
+        - name: Range
+          in: header
+          required: true
+          description: |
+            Byte range to stream.
+
+            Format:
+              bytes=<start>-<end>
+
+            Example:
+              bytes=0-1048575
+          schema:
+            type: string
+            pattern: "^bytes=\\d+-\\d+$"
+          example: bytes=0-1048575
+
+      responses:
+        "206":
+          description: Partial audio content successfully streamed
+
+          headers:
+            Content-Type:
+              description: MIME type of the streamed audio
+              schema:
+                type: string
+                example: audio/mpeg
+
+            Accept-Ranges:
+              description: Indicates byte-range support
+              schema:
+                type: string
+                example: bytes
+
+            Content-Range:
+              description: Returned byte range
+              schema:
+                type: string
+                example: bytes 0-1048575/53218492
+
+            Content-Length:
+              description: Size of the streamed chunk in bytes
+              schema:
+                type: integer
+                example: 1048576
+
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+
+          examples:
+            initialChunk:
+              summary: Initial audio chunk
+              value: "<audio stream data>"
+
+        "400":
+          description: Invalid request or malformed range header
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+              examples:
+                missingRangeHeader:
+                  summary: Missing range header
+                  value:
+                    error: "Range header required"
+
+                invalidRangeSize:
+                  summary: Requested range too large
+                  value:
+                    error: "Range error: range can not exceed 10485760 bytes"
+
+                malformedRange:
+                  summary: Malformed range header
+                  value:
+                    error: "Invalid range"
+
+        "401":
+          description: Unauthorized request
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+              examples:
+                unauthorized:
+                  summary: Invalid or expired token
+                  value:
+                    error: "Unauthorized"
+
+        "404":
+          description: Metadata or audio file not found
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+              examples:
+                metadataNotFound:
+                  summary: Metadata does not exist
+                  value:
+                    error: "metadata not found"
+
+                fileNotFound:
+                  summary: Audio file missing
+                  value:
+                    error: "No such file or directory"
+
+        "416":
+          description: Requested range is invalid or outside file bounds
+
+          headers:
+            Content-Range:
+              description: Indicates the valid file size
+              schema:
+                type: string
+                example: bytes */53218492
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+              examples:
+                invalidRange:
+                  summary: Invalid byte range
+                  value:
+                    error: "Invalid range"
+
+        "500":
+          description: Internal server error
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+              examples:
+                internalServerError:
+                  summary: Generic internal error
+                  value:
+                    error: "Internal server error"
+
+      x-codeSamples:
+        - lang: HTTP
+          label: Stream Initial Audio Chunk
+          source: |
+            GET /stream/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
+            Host: 127.0.0.1:8000
+            Authorization: Bearer eyJhbGciOi...
+            Range: bytes=0-1048575
+
+        - lang: HTTP
+          label: Resume Playback From Offset
+          source: |
+            GET /stream/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
+            Host: 127.0.0.1:8000
+            Authorization: Bearer eyJhbGciOi...
+            Range: bytes=1048576-2097151
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+
+      examples:
+        - error: "Range header required"
+
+externalDocs:
+  description: HTTP Range Requests Specification
+  url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests
+
+@end
+
+
+____________
+
+                                    $ _The developer usage guide you created using Prompt 3_
+
+
+@code markdown
+
+# Audio Streaming API Developer Guide (JavaScript)
+
+## Overview
+
+The Audio Streaming API provides HTTP byte-range based audio streaming for MP3 audio files.
+
+The endpoint supports:
+
+* Partial content streaming (`206 Partial Content`)
+* Audio seeking
+* Resume playback
+* Chunked downloads
+* Bearer token authentication
+
+This guide explains how to:
+
+1. Authenticate requests
+2. Format streaming requests correctly
+3. Interpret responses
+4. Handle common errors
+5. Build streaming and resumable playback clients in JavaScript
+
+---
+
+# Base URL
+
+```text
+http://127.0.0.1:8000
+```
+
+---
+
+# Endpoint
+
+```http
+GET /stream/{metadata_id}
+```
+
+Example:
+
+```text
+http://127.0.0.1:8000/stream/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+# Authentication
+
+The API uses Bearer token authentication.
+
+Every request must include:
+
+```http
+Authorization: Bearer <your_access_token>
+```
+
+Example:
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+If the token is:
+
+* missing
+* invalid
+* expired
+
+the API returns:
+
+```http
+401 Unauthorized
+```
+
+---
+
+# Byte Range Streaming
+
+The API requires the HTTP `Range` header.
+
+This tells the server which portion of the audio file to stream.
+
+---
+
+## Range Header Format
+
+```http
+Range: bytes=<start>-<end>
+```
+
+Example:
+
+```http
+Range: bytes=0-1048575
+```
+
+This requests:
+
+* starting byte: `0`
+* ending byte: `1048575`
+
+Total chunk size:
+
+* `1048576` bytes (1 MB)
+
+---
+
+# Important Requirements
+
+## `Range` Header Is Mandatory
+
+Requests without a `Range` header will fail.
+
+Invalid:
+
+```http
+GET /stream/{metadata_id}
+```
+
+Valid:
+
+```http
+GET /stream/{metadata_id}
+Range: bytes=0-1048575
+```
+
+---
+
+## Maximum Range Size
+
+The server enforces a maximum allowed range size.
+
+If the requested byte range exceeds the configured server limit:
+
+```json
+{
+  "error": "Range error: range can not exceed 10485760 bytes"
+}
+```
+
+Choose chunk sizes carefully.
+
+Recommended chunk sizes:
+
+* 256 KB
+* 512 KB
+* 1 MB
+
+---
+
+# Successful Response
+
+A successful streaming request returns:
+
+```http
+206 Partial Content
+```
+
+---
+
+# Response Headers
+
+## Content-Type
+
+```http
+Content-Type: audio/mpeg
+```
+
+Indicates MP3 audio data.
+
+---
+
+## Accept-Ranges
+
+```http
+Accept-Ranges: bytes
+```
+
+Confirms support for range requests.
+
+---
+
+## Content-Range
+
+Example:
+
+```http
+Content-Range: bytes 0-1048575/53218492
+```
+
+Meaning:
+
+* streamed bytes: `0-1048575`
+* total file size: `53218492`
+
+---
+
+## Content-Length
+
+```http
+Content-Length: 1048576
+```
+
+Size of the returned chunk.
+
+---
+
+# JavaScript Examples
+
+The examples below use:
+
+* Node.js 18+
+* native `fetch()`
+* Streams API
+
+---
+
+# Example 1 — Request an Audio Chunk
+
+```javascript
+const metadataId = "550e8400-e29b-41d4-a716-446655440000";
+
+const response = await fetch(
+  `http://127.0.0.1:8000/stream/${metadataId}`,
+  {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer YOUR_ACCESS_TOKEN",
+      Range: "bytes=0-1048575"
+    }
+  }
+);
+
+console.log("Status:", response.status);
+console.log("Content-Range:", response.headers.get("content-range"));
+console.log("Content-Length:", response.headers.get("content-length"));
+```
+
+Expected output:
+
+```text
+Status: 206
+Content-Range: bytes 0-1048575/53218492
+Content-Length: 1048576
+```
+
+---
+
+# Example 2 — Save Streamed Audio Chunk to File
+
+```javascript
+import fs from "fs";
+
+const metadataId = "550e8400-e29b-41d4-a716-446655440000";
+
+const response = await fetch(
+  `http://127.0.0.1:8000/stream/${metadataId}`,
+  {
+    headers: {
+      Authorization: "Bearer YOUR_ACCESS_TOKEN",
+      Range: "bytes=0-1048575"
+    }
+  }
+);
+
+if (!response.ok) {
+  throw new Error(`HTTP ${response.status}`);
+}
+
+const arrayBuffer = await response.arrayBuffer();
+
+fs.writeFileSync(
+  "audio_chunk.mp3",
+  Buffer.from(arrayBuffer)
+);
+
+console.log("Chunk saved");
+```
+
+---
+
+# Example 3 — Stream Audio in Chunks
+
+This approach is useful for:
+
+* media players
+* resumable downloads
+* buffering systems
+* proxy streaming services
+
+```javascript
+const metadataId = "550e8400-e29b-41d4-a716-446655440000";
+
+const CHUNK_SIZE = 1024 * 1024;
+
+let start = 0;
+let totalSize = null;
+
+while (true) {
+  const end = start + CHUNK_SIZE - 1;
+
+  const response = await fetch(
+    `http://127.0.0.1:8000/stream/${metadataId}`,
+    {
+      headers: {
+        Authorization: "Bearer YOUR_ACCESS_TOKEN",
+        Range: `bytes=${start}-${end}`
+      }
+    }
+  );
+
+  if (response.status !== 206) {
+    throw new Error(`Unexpected status ${response.status}`);
+  }
+
+  const contentRange = response.headers.get("content-range");
+
+  console.log("Received:", contentRange);
+
+  const match = contentRange.match(/bytes (\d+)-(\d+)\/(\d+)/);
+
+  if (!match) {
+    throw new Error("Invalid Content-Range header");
+  }
+
+  const [, rangeStart, rangeEnd, fileSize] = match;
+
+  totalSize = Number(fileSize);
+
+  const chunk = Buffer.from(await response.arrayBuffer());
+
+  console.log("Chunk size:", chunk.length);
+
+  start = Number(rangeEnd) + 1;
+
+  if (start >= totalSize) {
+    break;
+  }
+}
+
+console.log("Streaming complete");
+```
+
+---
+
+# Example 4 — Resume Playback
+
+To resume from a specific offset:
+
+```javascript
+const offset = 1048576;
+
+const response = await fetch(
+  `http://127.0.0.1:8000/stream/${metadataId}`,
+  {
+    headers: {
+      Authorization: "Bearer YOUR_ACCESS_TOKEN",
+      Range: `bytes=${offset}-${offset + 1048575}`
+    }
+  }
+);
+```
+
+This resumes playback from byte `1048576`.
+
+---
+
+# Error Handling
+
+---
+
+# 400 Bad Request
+
+Returned when:
+
+* `Range` header is missing
+* range is malformed
+* range exceeds max size
+
+Example:
+
+```json
+{
+  "error": "Range header required"
+}
+```
+
+Handling:
+
+```javascript
+if (response.status === 400) {
+  const error = await response.json();
+  console.error(error.error);
+}
+```
+
+---
+
+# 401 Unauthorized
+
+Returned when:
+
+* token is invalid
+* token expired
+* token missing
+
+Example:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+Handling:
+
+```javascript
+if (response.status === 401) {
+  console.error("Authentication failed");
+}
+```
+
+---
+
+# 404 Not Found
+
+Returned when:
+
+* metadata record does not exist
+* audio file missing
+
+Example:
+
+```json
+{
+  "error": "metadata not found"
+}
+```
+
+---
+
+# 416 Range Not Satisfiable
+
+Returned when:
+
+* requested range is invalid
+* requested range exceeds file bounds
+
+Example headers:
+
+```http
+Content-Range: bytes */53218492
+```
+
+Example body:
+
+```json
+{
+  "error": "Invalid range"
+}
+```
+
+The `Content-Range` header tells you the actual file size.
+
+Example recovery logic:
+
+```javascript
+if (response.status === 416) {
+  const actualSize =
+    response.headers
+      .get("content-range")
+      ?.split("/")
+      ?.pop();
+
+  console.error("Actual file size:", actualSize);
+}
+```
+
+---
+
+# 500 Internal Server Error
+
+Example:
+
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+Usually indicates:
+
+* filesystem issues
+* metadata lookup failure
+* unexpected server exception
+
+Retry logic is recommended.
+
+---
+
+# Best Practices
+
+## Use Small Chunk Sizes
+
+Recommended:
+
+* 256 KB
+* 512 KB
+* 1 MB
+
+Avoid extremely large ranges.
+
+---
+
+## Always Validate `Content-Range`
+
+Do not assume:
+
+* chunk size
+* file size
+* returned offsets
+
+Always parse and validate the response headers.
+
+---
+
+## Implement Retry Logic
+
+Network interruptions are common during streaming.
+
+Recommended:
+
+* exponential backoff
+* reconnect support
+* resume from last successful byte
+
+---
+
+## Avoid Full File Downloads
+
+This API is optimized for:
+
+* streaming
+* seeking
+* partial playback
+
+Avoid requesting the entire file unless absolutely necessary.
+
+---
+
+# Example Architecture Ideas
+
+This API works well for:
+
+* custom music players
+* podcast platforms
+* audiobook services
+* browser streaming proxies
+* Discord music bots
+* real-time transcription pipelines
+* mobile playback systems
+
+---
+
+# Typical Streaming Flow
+
+```text
+Client requests first chunk
+        ↓
+Server returns 206 Partial Content
+        ↓
+Client buffers audio
+        ↓
+Playback begins
+        ↓
+Client requests next chunk
+        ↓
+Repeat until complete
+```
+
+---
+
+# Troubleshooting
+
+## Problem: `400 Range header required`
+
+Cause:
+
+* missing `Range` header
+
+Fix:
+
+* always include `Range`
+
+---
+
+## Problem: `416 Range Not Satisfiable`
+
+Cause:
+
+* invalid byte range
+* range exceeds file size
+
+Fix:
+
+* inspect `Content-Range`
+* adjust offsets
+
+---
+
+## Problem: Playback Stops Randomly
+
+Possible causes:
+
+* chunk size too large
+* network interruption
+* token expiration
+
+Fix:
+
+* reduce chunk size
+* implement retry logic
+* refresh tokens automatically
+
+---
+
+# Summary
+
+To use this API successfully:
+
+1. Authenticate using Bearer tokens
+2. Always send a valid `Range` header
+3. Handle `206 Partial Content`
+4. Parse `Content-Range`
+5. Implement chunked streaming logic
+6. Gracefully recover from network and range errors
+
+The API is optimized for scalable and resumable audio streaming workflows.
+
+@end
+
