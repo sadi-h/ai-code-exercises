@@ -1,0 +1,162 @@
+* Prompt 1: Understand an Algorithm Through Step-by-Step Analysis
+-|-------------------------PROMPT--------------------------------|
+"""
+I'm trying to understand this algorithm/function in our codebase:
+
+[Paste complex function here]
+@code JavaScript
+function calculateTaskScore(task) {
+  // Base priority weights
+  const priorityWeights = {
+    [TaskPriority.LOW]: 1,
+    [TaskPriority.MEDIUM]: 2,
+    [TaskPriority.HIGH]: 3,
+    [TaskPriority.URGENT]: 4
+  };
+
+  // Calculate base score from priority
+  let score = (priorityWeights[task.priority] || 0) * 10;
+
+  // Add due date factor (higher score for tasks due sooner)
+  if (task.dueDate) {
+    const now = new Date();
+    const dueDate = new Date(task.dueDate);
+    const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilDue < 0) {  // Overdue tasks
+      score += 30;
+    } else if (daysUntilDue === 0) {  // Due today
+      score += 20;
+    } else if (daysUntilDue <= 2) {  // Due in next 2 days
+      score += 15;
+    } else if (daysUntilDue <= 7) {  // Due in next week
+      score += 10;
+    }
+  }
+
+  // Reduce score for tasks that are completed or in review
+  if (task.status === TaskStatus.DONE) {
+    score -= 50;
+  } else if (task.status === TaskStatus.REVIEW) {
+    score -= 15;
+  }
+
+  // Boost score for tasks with certain tags
+  if (task.tags.some(tag => ["blocker", "critical", "urgent"].includes(tag))) {
+    score += 8;
+  }
+
+  // Boost score for recently updated tasks
+  const now = new Date();
+  const updatedAt = new Date(task.updatedAt);
+  const daysSinceUpdate = Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24));
+  if (daysSinceUpdate < 1) {
+    score += 5;
+  }
+
+  return score;
+}
+
+function sortTasksByImportance(tasks) {
+  // Create a copy of the tasks array to avoid modifying the original
+  return [...tasks].sort((a, b) => {
+    return calculateTaskScore(b) - calculateTaskScore(a);
+  });
+}
+
+function getTopPriorityTasks(tasks, limit = 5) {
+  const sortedTasks = sortTasksByImportance(tasks);
+  return sortedTasks.slice(0, limit);
+}
+@end
+
+Based on my current understanding:
+  1. I think this function is trying to help the user focus on more import tasks by giving a higher priority weight to tasks that meet certain conditions.
+     for example, tasks that have certain tags, looking at the due date of the task and when the task was updated. This is to help the user focus on more important tasks, 
+     rather than completing tasks randomly or based on when they were created or due date.
+  2. The inputs seem to be:
+      -  For the calculateTaskScore takes `task` instance as input and returns a number (score)
+      -  For the sortTasksByImportance takes  an array of tasks as input and return a copy of that array sorted based on priority score
+      -  For the getTopPriorityTasks takes an array of tasks as input and returns a subset copy of that array sorted based on priority score
+
+3. I'm particularly confused about this particular line in `calculateTaskScore`: 
+@code JavaScript
+    //..rest of code
+    } else if (daysUntilDue === 0) {  // Due today
+    //..rest of code
+@end
+
+ This wouldn't handle the case where this function is called around 12 PM for example. The if expression wouldn't match event thought it should, because it a task is due lets say 15:00, its still later today.
+
+Could you help me understand this by:
+1. Breaking down the algorithm into key sections with their purposes
+2. Walking through a simple example execution with concrete values
+3. Explaining the core technique/pattern being used here
+4. Highlighting any non-obvious optimizations or tricks
+
+After your explanation, could you ask me 2-3 targeted questions that would test my understanding of this algorithm's:
+- Underlying principles
+- Edge cases
+- Performance characteristics
+
+This will help me make sure I've really grasped how it works.
+
+  -|-------------------------END PROMPT--------------------------------|
+
+
+  $ _How did the AI’s explanation change your understanding of the algorithm?_
+  - The A.I approach was to focus that I shouldn't focus on the numbers themselves, rather that I focus on what the numbers represented, and the context in which the numbers were added or substracted. A high number being added
+    would indicate that the condition that lead to that number being added meant that the was urgent. A higher number being substracted, would mean the opposite, in that the number represented a condition that meant the task's priority was not that urgent 
+
+  $ _What aspects were still difficult to understand after AI explanation?_
+  - Nothing really, the A.I's explaination was spot on and allowed me to understand the code well.
+   
+  $ _How would you explain this algorithm to another junior developer?_
+  - Firstly, we calcute initial priority weight from the task's priority. It is this code: 
+    @code JavaScript
+      const priorityWeights = {
+          [TaskPriority.LOW]: 1,
+          [TaskPriority.MEDIUM]: 2,
+          [TaskPriority.HIGH]: 3,
+          [TaskPriority.URGENT]: 4
+        };
+    @end
+  To calcualte task score, the calcuteTaskScore function does the following. We then use this priority Weights to get an initial score by multiplying the weight by 10; 
+  From there we check the due date, if the date has passed, we add 30 to the initial score. If the date falls within today, we add 20 and so on.
+  we then check at the task's status state. If its done, we decrement 50 from the score, if the status is `review` we decrement 15 from the score.
+  Then we check the task's tag array and check if any of the tags are "blocker", "critical", "urgent", if these tags are present, we increment the score by 8;
+  Then we check if the task was recently updated, if try we increment the score by 5;
+
+  From there the calculateTaskScore function is used in the  sortTasksByImportance which sorts tasks by their score. Tasks with a higher score are infront,
+
+  $ _Did you test this understanding against AI?_
+  - Yes, I tested the understanding by changing the numbers to see if I still get a consistant output, and also I inverted the conditions to check if the output would be the opposit on what I was getting.
+
+  $ _How might you improve the algorithm based on your understanding?_
+  - The improvement I would make are as follows: 
+    @code JavaScript
+    // ... rest of code
+    if (task.dueDate) {
+        const now = new Date();
+        const dueDate = new Date(task.dueDate);
+        const oneSecond = 1000;
+        const secondsInMinute = 60;
+        const minutesInHour = 60;
+        const hoursInDay = 24;
+        // this way the numbers used are easier to reason about
+        const daysUntilDue = Math.ceil((dueDate - now) / (oneSecond * secondsInMinute * minuteInHour * hoursInDay));
+
+        if (daysUntilDue < 0) {  // Overdue tasks
+          score += 30;
+        } else if (daysUntilDue === 0) {  // Due today
+          score += 20;
+        } else if (daysUntilDue <= 1) {  // Due today, but later
+          score += 15;
+        } else if (daysUntilDue <= 2) {  // Due in next 2 days
+          score += 10;
+        } else if (daysUntilDue <= 7) {  // Due in next week
+          score += 5;
+        }
+      }
+    @end
+  The only change I would make is make the daysUntilDue more explicit and clearer to read by introducing variables. and add an extra if condition, for when daysUntilDue !== 0, but it still falls within today 

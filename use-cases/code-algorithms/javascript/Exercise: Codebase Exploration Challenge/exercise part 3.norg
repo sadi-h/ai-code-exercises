@@ -163,7 +163,7 @@ Record in your journal:
   $ _A diagram of the data flow (can be hand-drawn or digital)_
   - The data flow of task completion is as follows:
 
-              User Terminal Input
+              user Terminal Input
                       │
                       ▼
               Commander Argument Parsing
