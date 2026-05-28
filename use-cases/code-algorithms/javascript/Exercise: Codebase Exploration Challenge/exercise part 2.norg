@@ -1,0 +1,214 @@
+* In this part, use the "Prompt 2: Deepen understanding of a codebase" prompt to explore the task prioritization system.
+Read through the code to form an initial understanding of how task priorities work
+
+  Use the prompt template to share your understanding with the AI and get guided questions:
+
+|---------- Prompt ------------|
+
+  """
+      I'd like your help in deepening my understanding of a codebase by you acting as my senior development pair programmer.
+
+      First, I'll share my current understanding of the code I'm exploring. Please acknowledge what parts I've understood correctly, then guide me with thoughtful questions rather than direct explanations.
+
+      ## My Current Understanding:
+
+  I'm exploring the task prioritization system within the `task_priority.js` and `models.js`. From what I can tell, it seems to assing a priority a number that is used to later score the task. The days left before before the task is overdue
+  is also used as part of the total priority score. for example, for tasks due today, 30 is added to the score. while the score is descreased for tasks with status `complete` or `review`. The score is further affected by certain tags and recently updated tasks. 
+
+      The main files involved appear to be:
+  -----  {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/task_priority.js}[task_priority.js]
+  -----  {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] - this file formats the output differently based on priority
+         // cli.js
+@code JavaScript
+//... rest of code
+
+const formatTask = (task) => {
+  const statusSymbol = {
+    [TaskStatus.TODO]: '[ ]',
+    [TaskStatus.IN_PROGRESS]: '[>]',
+    [TaskStatus.REVIEW]: '[?]',
+    [TaskStatus.DONE]: '[✓]'
+  };
+
+  const prioritySymbol = {
+    [TaskPriority.LOW]: '!',
+    [TaskPriority.MEDIUM]: '!!',
+    [TaskPriority.HIGH]: '!!!',
+    [TaskPriority.URGENT]: '!!!!'
+  };
+
+  const dueStr = task.dueDate
+    ? `Due: ${task.dueDate.toISOString().split('T')[0]}`
+    : 'No due date';
+
+  const tagsStr = task.tags.length
+    ? `Tags: ${task.tags.join(', ')}`
+    : 'No tags';
+
+  return (
+    `${statusSymbol[task.status]} ${task.id.substr(0, 8)} - ${prioritySymbol[task.priority]} ${task.title}\n` +
+    `  ${task.description}\n` +
+    `  ${dueStr} | ${tagsStr}\n` +
+    `  Created: ${task.createdAt.toISOString().split('T')[0]} ${task.createdAt.toTimeString().split(' ')[0]}`
+  );
+};
+
+//... rest of code
+
+@end
+
+@code JavaScript
+// task_priority.js
+
+const {TaskPriority, TaskStatus} = require("./models");
+
+function calculateTaskScore(task) {
+  // Base priority weights
+  const priorityWeights = {
+    [TaskPriority.LOW]: 1,
+    [TaskPriority.MEDIUM]: 2,
+    [TaskPriority.HIGH]: 3,
+    [TaskPriority.URGENT]: 4
+  };
+
+  // Calculate base score from priority
+  let score = (priorityWeights[task.priority] || 0) * 10;
+
+  // Add due date factor (higher score for tasks due sooner)
+  if (task.dueDate) {
+    const now = new Date();
+    const dueDate =task.dueDate;
+    const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilDue < 0) {  // Overdue tasks
+      score += 30;
+    } else if (daysUntilDue === 0) {  // Due today
+      score += 20;
+    } else if (daysUntilDue <= 2) {  // Due in next 2 days
+      score += 15;
+    } else if (daysUntilDue <= 7) {  // Due in next week
+      score += 10;
+    }
+  }
+
+  // Reduce score for tasks that are completed or in review
+  if (task.status === TaskStatus.DONE) {
+    score -= 50;
+  } else if (task.status === TaskStatus.REVIEW) {
+    score -= 15;
+  }
+
+  // Boost score for tasks with certain tags
+if (task.tags.some(tag => ["blocker", "critical", "urgent"].includes(tag))) {
+    score += 8;
+  }
+
+  // Boost score for recently updated tasks
+  const now = new Date();
+  const updatedAt = new Date(task.updatedAt);
+  const daysSinceUpdate = Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24));
+  if (daysSinceUpdate < 1) {
+    score += 5;
+  }
+
+  return score;
+}
+
+function sortTasksByImportance(tasks) {
+  // Create a copy of the tasks array to avoid modifying the original
+  return [...tasks].sort((a, b) => {
+    return calculateTaskScore(b) - calculateTaskScore(a);
+  });
+}
+
+function getTopPriorityTasks(tasks, limit = 5) {
+  const sortedTasks = sortTasksByImportance(tasks);
+  return sortedTasks.slice(0, limit);
+}
+
+// Export functions for testing
+module.exports = { calculateTaskScore, sortTasksByImportance, getTopPriorityTasks };
+@end
+
+
+      I think the code works like this:
+      the priority score is multiplied by 10 based on what the user set the priority to. Then 30 is added to that score if its overdue,
+      20 is added to that score if its due today, 15 is added if its due in the next two days or 10 is added to the score if its due in the next 7 days.
+      The score is descreased by 50 if the task status is completed, score is descreased by 15 if status is review. 
+      For the task with the following tags: "blocker", "critical", "urgent", the score is increased by 8.
+      The score is increased by 5 if the task's updatedAt property is less than one day
+
+
+      What's still unclear to me is where these numbers are coming from. Are they standard numbers that every program of its kind use to handle similar functionality, or are they just magic numbers that make sense in this program only.
+
+      ## What I'd like from you:
+
+      1. Acknowledge what parts of my understanding seem accurate
+      2. Ask me 3-5 thoughtful questions that will help me discover insights about:
+        - What specific parts of the code actually do
+        - How data moves through these functions
+        - What happens in different scenarios (like error cases)
+        - Why certain implementation choices were made
+
+      3. For some questions, ask me to share specific code snippets that would help answer the question
+      4. End with a practical question about how I might use or modify this code
+
+      Please don't give me direct explanations - help me discover the answers through guided questioning.
+  """
+
+** Answer those questions by examining the code further
+   $ _What command in cli.js eventually calls sortTasksByImportance() or getTopPriorityTasks()?_
+    @code JavaScript
+      // cli.js
+      program
+        .command('list')
+        .description('List all tasks')
+        .option('-s, --status <status>', 'Filter by status')
+        .option('-p, --priority <priority>', 'Filter by priority')
+        .option('-o, --overdue', 'Show only overdue tasks')
+        .action((options) => {
+          const tasks = taskManager.listTasks(options.status, options.priority, options.overdue);
+          if (tasks.length > 0) {
+            tasks.forEach(task => {
+              console.log(formatTask(task));
+              console.log('-'.repeat(50));
+            });
+          } else {
+            console.log('No tasks found matching the criteria.');
+          }
+        });
+    @end
+
+   The above code snippet within `cli.js` is responsible handling tasks by priority through the option of  `option('-p, --priority <priority>', 'Filter by priority')`
+   The command passes the options to an instance of `TaskManager` that calls the listTasks method witht the option.
+
+   $ _What behavior is the system trying to encourage?_
+   - By weighing tasks by priority, the system is trying to encourage the user to complete tasks in order of important. Allowing the user to complete tasks that are due sooner than those that aren't.
+     This is better than completing tasks looking at the due date only, or createdAt only. Because some more urgent tasks may arise than those that are due today and need to be completed first.
+   $ _What happens if a task is due later today?_
+   - If a task is due later today, than the score is incremented by 20. Though the check to increment the score would need to be modified a bit, because it checks if `daysUntilDue === 0`, but this may not always be true,
+     for example, what happens if the command is run around 12PM? The check wouldn't pass, event though its due later today. We would need to add another check like `daysUntilDue < 1` for such a condition to match.
+   $ _Why is REVIEW still considered somewhat important?_
+   - REVIEW is import because it represents tasks that either being worked on, or tasks whose priority is being reviewed whether to update or not. If a task in REVIEW gets their priority property updated, the priority score would 
+     change, hence we check for tasks that are in review. 
+   $ _What assumptions does this code make about task.tags?_
+   - The code assumes that tags are abitrary but, if common tags such as 'critical' or 'urgent' are used, then their presence should be considered when calculating priority score.
+   $ _Should formatting logic know about business priority semantics?_
+   - No, formatting should only concern its self with how to display information to the user.
+
+Record in your journal:
+
+******  Your initial understanding vs. what you discovered
+        - My initial understanding was that a task's priority was a static value that the user passes when they create the task. With the help of the A.I I discovered that 
+          a tasks priority hinged on more factors that the value the user provided. Which I think makes sense since, tasks with tags like `urgent` should be prioritized over other
+          tasks. 
+
+****** The key insights the guided questions helped you uncover
+       - The key insight from the questions is that I taught me that once I know the code structure, 
+         the next step is looking at the system from the perspective of a runtime flow. This helps discover the life-cycle of data and nuances to be aware of.
+
+****** Any misconceptions you had that were clarified
+       I initially thought the numbers used increment or decrement the priority score were somewhat standard numbers that many programs of similar functionality used. The A.I helped clear this misconception by pointing out 
+       that the numbers where completely random and only made sense within this program. The big take away is that when reading code and come across seemingly random numbers, rather then being fixated on the numbers themselves, 
+       try to understand the context being the numbers, what do these number represent what are the numbers trying to convey.
+

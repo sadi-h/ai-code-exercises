@@ -19,7 +19,13 @@ const TaskStatus = {
   REVIEW: 'review',
   DONE: 'done',
   ABANDONED: 'abandoned',
-  PRIORITY: 'priority'
+};
+
+const TaskPriority = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  URGENT: 4
 };
 
 class Task {
@@ -46,7 +52,7 @@ class TaskStorage {
 
           let taskDate = if (taskData.dueDate) new Date(tasksData.dueDate);
 
-          if ((taskDate.getDate() - new Date().getDate()) > 7 && taskDate.status !== TaskStatus.PRIORITY) {
+if ((taskDate.getDate() - new Date().getDate()) > 7 && taskDate.priority < TaskStatus.HIGH) {
               task.status = TaskStatus.ABANDONED;
           } else {
               task.status = taskData.status;

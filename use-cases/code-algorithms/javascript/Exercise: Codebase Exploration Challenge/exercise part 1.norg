@@ -1,0 +1,219 @@
+* In this part, use the "Prompt 1: Understand how a specific feature works" prompt to understand how task creation and status updates work.
+
+      $  _Identify the files related to task creation and status updates_
+        - For `task` creation, the files involved are:
+          ~ {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] - This takes user input from terminal.
+          ~ {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/app.js}[app.js] - This contains the `TaskManager` class that is responsible for creating tasks and updating their status.
+
+      $ _Copy relevant code snippets into your prompt_
+        - The relevant code for task creation are the `createTask` method of `TaskManager` and `updateTaskStatus` method of `TaskManager`
+
+        @code JavaScript 
+        // app.js
+          class TaskManager {
+
+            //... rest of code 
+
+            createTask(title, description = "", priorityValue = 2, dueDateStr = null, tags = []) {
+              const priority = priorityValue;
+              let dueDate = null;
+
+              if (dueDateStr) {
+                try {
+                  dueDate = new Date(dueDateStr);
+                  if (isNaN(dueDate.getTime())) {
+                    throw new Error("Invalid date");
+                  }
+                } catch (error) {
+                  console.error("Invalid date format. Use YYYY-MM-DD");
+                  return null;
+                }
+              }
+
+              //... rest of code 
+            }
+
+
+            updateTaskStatus(taskId, newStatusValue) {
+              if (newStatusValue === TaskStatus.DONE) {
+                const task = this.storage.getTask(taskId);
+                if (task) {
+                  task.markAsDone();
+                  this.storage.save();
+                  return true;
+                }
+                return false;
+              } else {
+                return this.storage.updateTask(taskId, { status: newStatusValue });
+              }
+            }
+
+            //... rest of code
+
+          }
+        @end
+
+     $ _Use the prompt template to ask the AI to explain this feature_
+       |---------- Prompt ------------|
+
+        """
+            I'm trying to understand how task creation and status updates work works in our nodejs codebase.
+            This feature seems to handle handle input from user from terminal using `commander's program` 
+            to parse user input into structured data based on cli arguments and values and passed to `TaskManager` instance to create the task.
+
+            Here are the key files that appear to be involved:
+            1. {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] - This takes user input from terminal.
+            2. {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/app.js}[app.js] - This contains the `TaskManager` class that is responsible for creating tasks and updating their status.
+
+            Here are code snippets from parts I'm struggling to understand:
+            @code JavaScript
+              // cli.js
+
+                const { program } = require('commander');
+                const { TaskManager } = require('./app');
+                const { TaskStatus, TaskPriority } = require('./models');
+
+              //... rest of code
+    
+              const taskManager = new TaskManager();
+              program
+                .command('create <title>')
+                .description('Create a new task')
+                .option('-d, --description <description>', 'Task description', '')
+                .option('-p, --priority <priority>', 'Task priority (1-4)', 2)
+                .option('-u, --due <due_date>', 'Due date (YYYY-MM-DD)')
+                .option('-t, --tags <tags>', 'Comma-separated tags', '')
+                .action((title, options) => {
+                  const tags = options.tags ? options.tags.split(',').map(tag => tag.trim()) : [];
+                  const taskId = taskManager.createTask(
+                    title,
+                    options.description,
+                    options.priority,
+                    options.due,
+                    tags
+                  );
+
+                  if (taskId) {
+                    console.log(`Created task with ID: ${taskId}`);
+                  }
+                  });
+
+              program
+                .command('status <task_id> <status>')
+                .description('Update task status')
+                .action((taskId, status) => {
+                  if (taskManager.updateTaskStatus(taskId, status)) {
+                    console.log(`Updated task status to ${status}`);
+                  } else {
+                    console.log('Failed to update task status. Task not found.');
+                  }
+                });
+
+              //... rest of code
+
+              program.parse(process.argv);
+
+
+            @end
+
+            @code JavaScript 
+              // app.js
+                  class TaskManager {
+
+                    //... rest of code 
+
+                    createTask(title, description = "", priorityValue = 2, dueDateStr = null, tags = []) {
+                      const priority = priorityValue;
+                      let dueDate = null;
+
+                      if (dueDateStr) {
+                        try {
+                          dueDate = new Date(dueDateStr);
+                          if (isNaN(dueDate.getTime())) {
+                            throw new Error("Invalid date");
+                          }
+                        } catch (error) {
+                          console.error("Invalid date format. Use YYYY-MM-DD");
+                          return null;
+                        }
+                      }
+
+                      //... rest of code 
+                    }
+
+
+                    updateTaskStatus(taskId, newStatusValue) {
+                      if (newStatusValue === TaskStatus.DONE) {
+                        const task = this.storage.getTask(taskId);
+                  if (task) {
+                    task.markAsDone();
+                    this.storage.save();
+                    return true;
+                  }
+                  return false;
+                } else {
+                  return this.storage.updateTask(taskId, { status: newStatusValue });
+                }
+              }
+
+              //... rest of code
+
+            }
+        @end
+
+            Could you:
+            1. Explain in simple terms what this component actually does
+            2. Walk me through the execution flow when terminal arguments are captured. How does the program handle bad input? 
+            3. Clarify how these files interact with each other
+            4. Identify any external dependencies or services this component relies on
+            5. Explain any complex code blocks
+            6. Provide a mental model I can use to think about this component
+
+            I'm particularly confused about `commander's` handling of arguments, so extra detail there would help.
+            Finally, suggest 3 small code changes I could make to validate my understanding. Do not give the me change, and instead give me the requirement.
+         """
+      - Record in your journal:
+      ****** The main components involved in task creation/updates
+                    cli.js
+                      │
+                      │ parses terminal input
+                      ▼
+                    TaskManager (app.js)
+                      │
+                      │ controls program flow 
+                      ▼
+                    TaskStorage
+                      │
+                      │ persists/retrieves tasks
+                      ▼
+                    tasks.json
+
+                    TaskManager also uses:
+                      ▼
+                    Task (models.js)
+
+      ****** The execution flow when a task is created/updated
+                    User Input
+                        │
+                        ▼
+                    Commander
+                        │
+                        ▼
+                    cli.js
+                        │ converts input
+                        ▼
+                    TaskManager
+                        │ creates/updates entities
+                        ▼
+                    TaskStorage
+                        │ saves data
+                        ▼
+                    JSON file
+
+      ****** How data is stored and retrieved
+              - Data is stored as strings in a file. The string is json formated. When retrieving the data, the json file is read as string, and the string is parsed with
+                JSON.parse(string) to deserialize the string into `task` objects
+
+      ****** Any interesting design patterns you discovered
+             *program.command('create <title>')* does NOT execute the command yet. It only registers the command definition with Commander's internal command registry.
+             Really interesting design because I am used to writing code that execute immediately when evaluated, unless its asyc code like `setTimeOut`. 
