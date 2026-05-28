@@ -1,0 +1,882 @@
+@code js
+// app.js
+const { Task, TaskPriority, TaskStatus } = require('./models');
+const { TaskStorage } = require('./storage');
+
+class TaskManager {
+  constructor(storagePath = 'tasks.json') {
+    this.storage = new TaskStorage(storagePath);
+  }
+
+  createTask(title, description = "", priorityValue = 2, dueDateStr = null, tags = []) {
+    const priority = priorityValue;
+    let dueDate = null;
+
+    if (dueDateStr) {
+      try {
+        dueDate = new Date(dueDateStr);
+        if (isNaN(dueDate.getTime())) {
+          throw new Error("Invalid date");
+        }
+      } catch (error) {
+        console.error("Invalid date format. Use YYYY-MM-DD");
+        return null;
+      }
+    }
+
+    const task = new Task(title, description, priority, dueDate, tags);
+    const taskId = this.storage.addTask(task);
+    return taskId;
+  }
+
+  listTasks(statusFilter = null, priorityFilter = null, showOverdue = false) {
+    if (showOverdue) {
+      return this.storage.getOverdueTasks();
+    }
+
+    if (statusFilter) {
+      return this.storage.getTasksByStatus(statusFilter);
+    }
+
+    if (priorityFilter) {
+      return this.storage.getTasksByPriority(parseInt(priorityFilter));
+    }
+
+    return this.storage.getAllTasks();
+  }
+
+  updateTaskStatus(taskId, newStatusValue) {
+    if (newStatusValue === TaskStatus.DONE) {
+      const task = this.storage.getTask(taskId);
+      if (task) {
+        task.markAsDone();
+        this.storage.save();
+        return true;
+      }
+      return false;
+    } else {
+      return this.storage.updateTask(taskId, { status: newStatusValue });
+    }
+  }
+
+  updateTaskPriority(taskId, newPriorityValue) {
+    return this.storage.updateTask(taskId, { priority: parseInt(newPriorityValue) });
+  }
+
+  updateTaskDueDate(taskId, dueDateStr) {
+    try {
+      const dueDate = new Date(dueDateStr);
+      if (isNaN(dueDate.getTime())) {
+        throw new Error("Invalid date");
+      }
+      return this.storage.updateTask(taskId, { dueDate });
+    } catch (error) {
+      console.error("Invalid date format. Use YYYY-MM-DD");
+      return false;
+    }
+  }
+
+  deleteTask(taskId) {
+    return this.storage.deleteTask(taskId);
+  }
+
+  getTaskDetails(taskId) {
+    return this.storage.getTask(taskId);
+  }
+
+  addTagToTask(taskId, tag) {
+    const task = this.storage.getTask(taskId);
+    if (task) {
+      if (!task.tags.includes(tag)) {
+        task.tags.push(tag);
+        this.storage.save();
+      }
+      return true;
+    }
+    return false;
+  }
+
+  removeTagFromTask(taskId, tag) {
+    const task = this.storage.getTask(taskId);
+    if (task && task.tags.includes(tag)) {
+      task.tags = task.tags.filter(t => t !== tag);
+      this.storage.save();
+      return true;
+    }
+    return false;
+  }
+
+  getStatistics() {
+    const tasks = this.storage.getAllTasks();
+    const total = tasks.length;
+
+    // Count by status
+    const statusCounts = Object.values(TaskStatus).reduce((acc, status) => {
+      acc[status] = 0;
+      return acc;
+    }, {});
+
+    tasks.forEach(task => {
+      statusCounts[task.status]++;
+    });
+
+    // Count by priority
+    const priorityCounts = Object.values(TaskPriority).reduce((acc, priority) => {
+      acc[priority] = 0;
+      return acc;
+    }, {});
+
+    tasks.forEach(task => {
+      priorityCounts[task.priority]++;
+    });
+
+    // Count overdue
+    const overdueTasks = tasks.filter(task => task.isOverdue());
+
+    // Count completed in last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const completedRecently = tasks.filter(task =>
+      task.completedAt && task.completedAt >= sevenDaysAgo
+    );
+
+    return {
+      total,
+      byStatus: statusCounts,
+      byPriority: priorityCounts,
+      overdue: overdueTasks.length,
+      completedLastWeek: completedRecently.length
+    };
+  }
+}
+
+module.exports = { TaskManager };
+@end
+
+@code js
+// cli.js
+const { program } = require('commander');
+const { TaskManager } = require('./app');
+const { TaskStatus, TaskPriority } = require('./models');
+
+const formatTask = (task) => {
+  const statusSymbol = {
+    [TaskStatus.TODO]: '[ ]',
+    [TaskStatus.IN_PROGRESS]: '[>]',
+    [TaskStatus.REVIEW]: '[?]',
+    [TaskStatus.DONE]: '[✓]'
+  };
+
+  const prioritySymbol = {
+    [TaskPriority.LOW]: '!',
+    [TaskPriority.MEDIUM]: '!!',
+    [TaskPriority.HIGH]: '!!!',
+    [TaskPriority.URGENT]: '!!!!'
+  };
+
+  const dueStr = task.dueDate
+    ? `Due: ${task.dueDate.toISOString().split('T')[0]}`
+    : 'No due date';
+
+  const tagsStr = task.tags.length
+    ? `Tags: ${task.tags.join(', ')}`
+    : 'No tags';
+
+  return (
+    `${statusSymbol[task.status]} ${task.id.substr(0, 8)} - ${prioritySymbol[task.priority]} ${task.title}\n` +
+    `  ${task.description}\n` +
+    `  ${dueStr} | ${tagsStr}\n` +
+    `  Created: ${task.createdAt.toISOString().split('T')[0]} ${task.createdAt.toTimeString().split(' ')[0]}`
+  );
+};
+
+const taskManager = new TaskManager();
+
+program
+  .version('1.0.0')
+  .description('Task Manager CLI');
+
+program
+  .command('create <title>')
+  .description('Create a new task')
+  .option('-d, --description <description>', 'Task description', '')
+  .option('-p, --priority <priority>', 'Task priority (1-4)', 2)
+  .option('-u, --due <due_date>', 'Due date (YYYY-MM-DD)')
+  .option('-t, --tags <tags>', 'Comma-separated tags', '')
+  .action((title, options) => {
+    const tags = options.tags ? options.tags.split(',').map(tag => tag.trim()) : [];
+    const taskId = taskManager.createTask(
+      title,
+      options.description,
+      options.priority,
+      options.due,
+      tags
+    );
+
+    if (taskId) {
+      console.log(`Created task with ID: ${taskId}`);
+    }
+  });
+
+program
+  .command('list')
+  .description('List all tasks')
+  .option('-s, --status <status>', 'Filter by status')
+  .option('-p, --priority <priority>', 'Filter by priority')
+  .option('-o, --overdue', 'Show only overdue tasks')
+  .action((options) => {
+    const tasks = taskManager.listTasks(options.status, options.priority, options.overdue);
+    if (tasks.length > 0) {
+      tasks.forEach(task => {
+        console.log(formatTask(task));
+        console.log('-'.repeat(50));
+      });
+    } else {
+      console.log('No tasks found matching the criteria.');
+    }
+  });
+
+program
+  .command('status <task_id> <status>')
+  .description('Update task status')
+  .action((taskId, status) => {
+    if (taskManager.updateTaskStatus(taskId, status)) {
+      console.log(`Updated task status to ${status}`);
+    } else {
+      console.log('Failed to update task status. Task not found.');
+    }
+  });
+
+program
+  .command('priority <task_id> <priority>')
+  .description('Update task priority')
+  .action((taskId, priority) => {
+    if (taskManager.updateTaskPriority(taskId, priority)) {
+      console.log(`Updated task priority to ${priority}`);
+    } else {
+      console.log('Failed to update task priority. Task not found.');
+    }
+  });
+
+program
+  .command('due <task_id> <due_date>')
+  .description('Update task due date')
+  .action((taskId, dueDate) => {
+    if (taskManager.updateTaskDueDate(taskId, dueDate)) {
+      console.log(`Updated task due date to ${dueDate}`);
+    } else {
+      console.log('Failed to update task due date. Task not found or invalid date.');
+    }
+  });
+
+program
+  .command('tag <task_id> <tag>')
+  .description('Add tag to task')
+  .action((taskId, tag) => {
+    if (taskManager.addTagToTask(taskId, tag)) {
+      console.log(`Added tag '${tag}' to task`);
+    } else {
+      console.log('Failed to add tag. Task not found.');
+    }
+  });
+
+program
+  .command('untag <task_id> <tag>')
+  .description('Remove tag from task')
+  .action((taskId, tag) => {
+    if (taskManager.removeTagFromTask(taskId, tag)) {
+      console.log(`Removed tag '${tag}' from task`);
+    } else {
+      console.log('Failed to remove tag. Task or tag not found.');
+    }
+  });
+
+program
+  .command('show <task_id>')
+  .description('Show task details')
+  .action((taskId) => {
+    const task = taskManager.getTaskDetails(taskId);
+    if (task) {
+      console.log(formatTask(task));
+    } else {
+      console.log('Task not found.');
+    }
+  });
+
+program
+  .command('delete <task_id>')
+  .description('Delete a task')
+  .action((taskId) => {
+    if (taskManager.deleteTask(taskId)) {
+      console.log(`Deleted task ${taskId}`);
+    } else {
+      console.log('Failed to delete task. Task not found.');
+    }
+  });
+
+program
+  .command('stats')
+  .description('Show task statistics')
+  .action(() => {
+    const stats = taskManager.getStatistics();
+    console.log(`Total tasks: ${stats.total}`);
+    console.log('By status:');
+    Object.entries(stats.byStatus).forEach(([status, count]) => {
+      console.log(`  ${status}: ${count}`);
+    });
+    console.log('By priority:');
+    Object.entries(stats.byPriority).forEach(([priority, count]) => {
+      console.log(`  ${priority}: ${count}`);
+    });
+    console.log(`Overdue tasks: ${stats.overdue}`);
+    console.log(`Completed in last 7 days: ${stats.completedLastWeek}`);
+  });
+
+program.parse(process.argv);
+
+// If no arguments, show help
+if (!process.argv.slice(2).length) {
+  program.outputHelp();
+}
+@end
+
+
+@code js
+
+// models.js
+const { v4: uuidv4 } = require('uuid');
+
+const TaskPriority = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  URGENT: 4
+};
+
+const TaskStatus = {
+  TODO: 'todo',
+  IN_PROGRESS: 'in_progress',
+  REVIEW: 'review',
+  DONE: 'done'
+};
+
+class Task {
+  constructor(title, description = '', priority = TaskPriority.MEDIUM, dueDate = null, tags = []) {
+    this.id = uuidv4();
+    this.title = title;
+    this.description = description;
+    this.priority = priority;
+    this.status = TaskStatus.TODO;
+    this.createdAt = new Date();
+    this.updatedAt = this.createdAt;
+    this.dueDate = dueDate;
+    this.completedAt = null;
+    this.tags = tags;
+  }
+
+  update(updates) {
+    Object.keys(updates).forEach(key => {
+      if (this.hasOwnProperty(key)) {
+        this[key] = updates[key];
+      }
+    });
+    this.updatedAt = new Date();
+  }
+
+  markAsDone() {
+    this.status = TaskStatus.DONE;
+    this.completedAt = new Date();
+    this.updatedAt = this.completedAt;
+  }
+
+  isOverdue() {
+    if (!this.dueDate) {
+      return false;
+    }
+    return this.dueDate < new Date() && this.status !== TaskStatus.DONE;
+  }
+}
+
+module.exports = { Task, TaskPriority, TaskStatus };
+@end
+
+
+@code js
+// storage.js
+const fs = require('fs');
+const path = require('path');
+const { Task, TaskPriority, TaskStatus } = require('./models');
+
+class TaskStorage {
+  constructor(storagePath = 'tasks.json') {
+    this.storagePath = storagePath;
+    this.tasks = {};
+    this.load();
+  }
+
+  load() {
+    if (fs.existsSync(this.storagePath)) {
+      try {
+        const rawData = fs.readFileSync(this.storagePath, 'utf8');
+        const tasksData = JSON.parse(rawData);
+
+        tasksData.forEach(taskData => {
+          const task = new Task(taskData.title, taskData.description);
+          // Restore all properties from saved data
+          task.id = taskData.id;
+          task.priority = taskData.priority;
+          task.status = taskData.status;
+          task.createdAt = new Date(taskData.createdAt);
+          task.updatedAt = new Date(taskData.updatedAt);
+
+          if (taskData.dueDate) {
+            task.dueDate = new Date(taskData.dueDate);
+          }
+
+          if (taskData.completedAt) {
+            task.completedAt = new Date(taskData.completedAt);
+          }
+
+          task.tags = taskData.tags || [];
+
+          this.tasks[task.id] = task;
+        });
+      } catch (error) {
+        console.error(`Error loading tasks: ${error.message}`);
+      }
+    }
+  }
+
+  save() {
+    try {
+      const tasksArray = Object.values(this.tasks);
+      fs.writeFileSync(this.storagePath, JSON.stringify(tasksArray, null, 2));
+    } catch (error) {
+      console.error(`Error saving tasks: ${error.message}`);
+    }
+  }
+
+  addTask(task) {
+    this.tasks[task.id] = task;
+    this.save();
+    return task.id;
+  }
+
+  getTask(taskId) {
+    return this.tasks[taskId];
+  }
+
+  updateTask(taskId, updates) {
+    const task = this.getTask(taskId);
+    if (task) {
+      task.update(updates);
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  deleteTask(taskId) {
+    if (this.tasks[taskId]) {
+      delete this.tasks[taskId];
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  getAllTasks() {
+    return Object.values(this.tasks);
+  }
+
+  getTasksByStatus(status) {
+    return Object.values(this.tasks).filter(task => task.status === status);
+  }
+
+  getTasksByPriority(priority) {
+    return Object.values(this.tasks).filter(task => task.priority === priority);
+  }
+
+  getOverdueTasks() {
+    return Object.values(this.tasks).filter(task => task.isOverdue());
+  }
+}
+
+module.exports = { TaskStorage };
+@end
+
+@code js
+//task_list_merge.js
+const { TaskStatus } = require("./models");
+
+function mergeTaskLists(localTasks, remoteTasks) {
+  /**
+   * Merge two task lists with conflict resolution.
+   *
+   * Args:
+   *   localTasks: Object of tasks from local source {task_id: task}
+   *   remoteTasks: Object of tasks from remote source {task_id: task}
+   *
+   * Returns:
+   *   Object with:
+   *     - mergedTasks: Combined tasks
+   *     - toCreateRemote: Tasks to be created in remote
+   *     - toUpdateRemote: Tasks to be updated in remote
+   *     - toCreateLocal: Tasks to be created in local
+   *     - toUpdateLocal: Tasks to be updated in local
+   */
+  const mergedTasks = {};
+  const toCreateRemote = {};
+  const toUpdateRemote = {};
+  const toCreateLocal = {};
+  const toUpdateLocal = {};
+
+  // Step 1: Identify all unique task IDs across both sources
+  const allTaskIds = new Set([
+    ...Object.keys(localTasks),
+    ...Object.keys(remoteTasks)
+  ]);
+
+  for (const taskId of allTaskIds) {
+    const localTask = localTasks[taskId];
+    const remoteTask = remoteTasks[taskId];
+
+    // Case 1: Task exists only locally - add to remote
+    if (localTask && !remoteTask) {
+      mergedTasks[taskId] = localTask;
+      toCreateRemote[taskId] = localTask;
+    }
+    // Case 2: Task exists only in remote - add to local
+    else if (!localTask && remoteTask) {
+      mergedTasks[taskId] = remoteTask;
+      toCreateLocal[taskId] = remoteTask;
+    }
+    // Case 3: Task exists in both - resolve conflicts
+    else {
+      const [mergedTask, shouldUpdateLocal, shouldUpdateRemote] =
+        resolveTaskConflict(localTask, remoteTask);
+
+      mergedTasks[taskId] = mergedTask;
+
+      if (shouldUpdateLocal) {
+        toUpdateLocal[taskId] = mergedTask;
+      }
+
+      if (shouldUpdateRemote) {
+        toUpdateRemote[taskId] = mergedTask;
+      }
+    }
+  }
+
+  return {
+    mergedTasks,
+    toCreateRemote,
+    toUpdateRemote,
+    toCreateLocal,
+    toUpdateLocal
+  };
+}
+
+function resolveTaskConflict(localTask, remoteTask) {
+  /**
+   * Resolve conflicts between two versions of the same task.
+   *
+   * Returns:
+   *   [mergedTask, shouldUpdateLocal, shouldUpdateRemote]
+   */
+  // Make a copy of the local task to use as our base
+  const mergedTask = {...localTask};
+
+  // Track if we need to update either source
+  let shouldUpdateLocal = false;
+  let shouldUpdateRemote = false;
+
+  // Most recent update wins for most fields
+  const localDate = new Date(localTask.updatedAt);
+  const remoteDate = new Date(remoteTask.updatedAt);
+
+  if (remoteDate > localDate) {
+    // Remote task is newer, update local fields
+    mergedTask.title = remoteTask.title;
+    mergedTask.description = remoteTask.description;
+    mergedTask.priority = remoteTask.priority;
+    mergedTask.dueDate = remoteTask.dueDate;
+    shouldUpdateLocal = true;
+  } else {
+    // Local task is newer or same age, update remote fields
+    shouldUpdateRemote = true;
+  }
+
+  // Special handling for completed status - completed wins over not completed
+  if (remoteTask.status === TaskStatus.DONE && localTask.status !== TaskStatus.DONE) {
+    mergedTask.status = TaskStatus.DONE;
+    mergedTask.completedAt = remoteTask.completedAt;
+    shouldUpdateLocal = true;
+  } else if (localTask.status === TaskStatus.DONE && remoteTask.status !== TaskStatus.DONE) {
+    // Keep local status (already in mergedTask)
+    shouldUpdateRemote = true;
+  } else if (remoteTask.status !== localTask.status) {
+    // Different non-completed status - most recent wins
+    if (remoteDate > localDate) {
+      mergedTask.status = remoteTask.status;
+      shouldUpdateLocal = true;
+    } else {
+      // Keep local status (already in mergedTask)
+      shouldUpdateRemote = true;
+    }
+  }
+
+  // Merge tags from both sources (union)
+  const allTags = [...new Set([...localTask.tags, ...remoteTask.tags])];
+  mergedTask.tags = allTags;
+
+  // If tags changed in either source, update both
+  if (!arraysEqual(mergedTask.tags, localTask.tags)) {
+    shouldUpdateLocal = true;
+  }
+  if (!arraysEqual(mergedTask.tags, remoteTask.tags)) {
+    shouldUpdateRemote = true;
+  }
+
+  // Update the timestamp to latest
+  mergedTask.updatedAt = localDate > remoteDate ? localTask.updatedAt : remoteTask.updatedAt;
+
+  return [mergedTask, shouldUpdateLocal, shouldUpdateRemote];
+}
+
+// Helper function to compare arrays
+function arraysEqual(a, b) {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((val, i) => val === sortedB[i]);
+}
+
+// Export functions for testing
+module.exports = { mergeTaskLists, resolveTaskConflict, arraysEqual };
+@end
+
+@code js
+// task_parse.js
+const {TaskPriority, Task} = require("./models");
+
+function parseTaskFromText(text) {
+  /**
+   * Parse free-form text to extract task properties.
+   *
+   * Examples of format it can parse:
+   * "Buy milk @shopping !2 #tomorrow"
+   * "Finish report for client XYZ !urgent #friday #work @project"
+   *
+   * Where:
+   * - Basic text is the task title
+   * - @tag adds a tag
+   * - !N sets priority (1=low, 2=medium, 3=high, 4=urgent)
+   * - !urgent/!high/!medium/!low sets priority by name
+   * - #date sets a due date
+   */
+
+  // Default task properties
+  let title = text.trim();
+  let priority = TaskPriority.MEDIUM;
+  let dueDate = null;
+  let tags = [];
+
+  // Extract priority markers (!N or !name)
+  const priorityMatches = title.match(/\s!([1-4]|urgent|high|medium|low)\b/i);
+  if (priorityMatches) {
+    const priorityText = priorityMatches[1].toLowerCase();
+    // Remove from title
+    title = title.replace(/\s!([1-4]|urgent|high|medium|low)\b/i, '');
+
+    // Convert to TaskPriority
+    if (priorityText === '1' || priorityText === 'low') {
+      priority = TaskPriority.LOW;
+    } else if (priorityText === '2' || priorityText === 'medium') {
+      priority = TaskPriority.MEDIUM;
+    } else if (priorityText === '3' || priorityText === 'high') {
+      priority = TaskPriority.HIGH;
+    } else if (priorityText === '4' || priorityText === 'urgent') {
+      priority = TaskPriority.URGENT;
+    }
+  }
+
+  // Extract tags (@tag)
+  const tagRegex = /\s@(\w+)/g;
+  let tagMatch;
+  while ((tagMatch = tagRegex.exec(text)) !== null) {
+    tags.push(tagMatch[1]);
+    // Remove from title (we'll handle this after all tags are collected)
+  }
+
+  // Remove all tags from the title
+  title = title.replace(/\s@\w+/g, '');
+
+  // Extract date markers (#date)
+  const dateRegex = /\s#(\w+)/g;
+  const dates = [];
+  let dateMatch;
+  while ((dateMatch = dateRegex.exec(text)) !== null) {
+    dates.push(dateMatch[1]);
+    // Remove from title (we'll handle this after all dates are collected)
+  }
+
+  // Remove all date markers from the title
+  title = title.replace(/\s#\w+/g, '');
+
+  // Try to parse date references
+  if (dates.length > 0) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const dateStr of dates) {
+      const lowerDateStr = dateStr.toLowerCase();
+
+      if (lowerDateStr === 'today' || lowerDateStr === 'now') {
+        dueDate = today;
+        break;
+      } else if (lowerDateStr === 'tomorrow') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        dueDate = tomorrow;
+        break;
+      } else if (lowerDateStr === 'next_week' || lowerDateStr === 'nextweek') {
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        dueDate = nextWeek;
+        break;
+      } else if (['monday', 'mon', 'tuesday', 'tue', 'wednesday', 'wed',
+                  'thursday', 'thu', 'friday', 'fri', 'saturday', 'sat',
+                  'sunday', 'sun'].includes(lowerDateStr)) {
+        const dayMap = {
+          'monday': 1, 'mon': 1,
+          'tuesday': 2, 'tue': 2,
+          'wednesday': 3, 'wed': 3,
+          'thursday': 4, 'thu': 4,
+          'friday': 5, 'fri': 5,
+          'saturday': 6, 'sat': 6,
+          'sunday': 0, 'sun': 0
+        };
+
+        dueDate = getNextWeekday(today, dayMap[lowerDateStr]);
+        break;
+      }
+
+      // Try to parse as YYYY-MM-DD
+      const dateComponents = lowerDateStr.split('-');
+      if (dateComponents.length === 3) {
+        const parsedDate = new Date(
+          parseInt(dateComponents[0]),
+          parseInt(dateComponents[1]) - 1,
+          parseInt(dateComponents[2])
+        );
+
+        if (!isNaN(parsedDate.getTime())) {
+          dueDate = parsedDate;
+          break;
+        }
+      }
+    }
+  }
+
+  // Trim excess whitespace from title
+  title = title.replace(/\s+/g, ' ').trim();
+
+  // Create a new task with the extracted properties
+  const task = new Task(title);
+  task.priority = priority;
+  task.dueDate = dueDate;
+  task.tags = tags;
+
+  return task;
+}
+
+function getNextWeekday(currentDate, targetDay) {
+  // Get the next occurrence of a specific weekday
+  const result = new Date(currentDate);
+  result.setDate(currentDate.getDate() + (targetDay + 7 - currentDate.getDay()) % 7);
+
+  // If we landed on today and it's the target day, move to next week
+  if (result.getTime() === currentDate.getTime()) {
+    result.setDate(result.getDate() + 7);
+  }
+
+  return result;
+}
+
+// Export functions for testing
+module.exports = { parseTaskFromText, getNextWeekday };
+@end
+
+@code js
+// task_priority.js
+const {TaskPriority, TaskStatus} = require("./models");
+
+function calculateTaskScore(task) {
+  // Base priority weights
+  const priorityWeights = {
+    [TaskPriority.LOW]: 1,
+    [TaskPriority.MEDIUM]: 2,
+    [TaskPriority.HIGH]: 3,
+    [TaskPriority.URGENT]: 4
+  };
+
+  // Calculate base score from priority
+  let score = (priorityWeights[task.priority] || 0) * 10;
+
+  // Add due date factor (higher score for tasks due sooner)
+  if (task.dueDate) {
+    const now = new Date();
+    const dueDate =task.dueDate;
+    const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilDue < 0) {  // Overdue tasks
+      score += 30;
+    } else if (daysUntilDue === 0) {  // Due today
+      score += 20;
+    } else if (daysUntilDue <= 2) {  // Due in next 2 days
+      score += 15;
+    } else if (daysUntilDue <= 7) {  // Due in next week
+      score += 10;
+    }
+  }
+
+  // Reduce score for tasks that are completed or in review
+  if (task.status === TaskStatus.DONE) {
+    score -= 50;
+  } else if (task.status === TaskStatus.REVIEW) {
+    score -= 15;
+  }
+
+  // Boost score for tasks with certain tags
+  if (task.tags.some(tag => ["blocker", "critical", "urgent"].includes(tag))) {
+    score += 8;
+  }
+
+  // Boost score for recently updated tasks
+  const now = new Date();
+  const updatedAt = new Date(task.updatedAt);
+  const daysSinceUpdate = Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24));
+  if (daysSinceUpdate < 1) {
+    score += 5;
+  }
+
+  return score;
+}
+
+function sortTasksByImportance(tasks) {
+  // Create a copy of the tasks array to avoid modifying the original
+  return [...tasks].sort((a, b) => {
+    return calculateTaskScore(b) - calculateTaskScore(a);
+  });
+}
+
+function getTopPriorityTasks(tasks, limit = 5) {
+  const sortedTasks = sortTasksByImportance(tasks);
+  return sortedTasks.slice(0, limit);
+}
+
+// Export functions for testing
+module.exports = { calculateTaskScore, sortTasksByImportance, getTopPriorityTasks };
+@end

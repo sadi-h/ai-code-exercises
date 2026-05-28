@@ -1,0 +1,1471 @@
+* 1 _The project information I chose to document_
+- I chose to document is the `JavaScript Task Manager`. The project is a modular command-line task management application built with JavaScript and Node.js. It provides functionality for creating, organizing, prioritizing, tracking, and synchronizing tasks using a persistent JSON-based storage system.
+
+  The application follows a layered architecture with separate modules for:
+  Task data modeling
+  Business logic and task management
+  Persistent storage
+  Command-line interaction
+  Task parsing and prioritization utilities
+  Task synchronization and conflict resolution
+  The system is designed to be lightweight, extensible, and easy to maintain.
+
+___________________
+
+* 2 _The comprehensive README generated using Prompt 1_
+
+
+@code markdown
+
+# Task Manager
+
+A lightweight, extensible, and maintainable command-line task management application built with Node.js.
+
+Task Manager follows a layered architecture with separate modules for:
+
+* Task data modeling
+* Business logic and task management
+* Persistent storage
+* Command-line interaction
+* Task parsing and prioritization utilities
+* Task synchronization and conflict resolution
+
+The project is designed to provide a clean developer experience while remaining flexible enough for future expansion.
+
+---
+
+# Features
+
+## Core Task Management
+
+* Create and manage tasks
+* Update task statuses
+* Assign task priorities
+* Add due dates
+* Add and remove tags
+* Delete tasks
+
+## Task Organization
+
+* Filter tasks by status
+* Filter tasks by priority
+* View overdue tasks
+* View task details
+
+## Persistence
+
+* Automatically save tasks to disk
+* Restore tasks from JSON storage
+
+## Statistics & Analytics
+
+* Total task counts
+* Tasks grouped by status
+* Tasks grouped by priority
+* Overdue task tracking
+* Recently completed tasks
+
+## Advanced Utilities
+
+* Parse free-form task input
+* Rank tasks by importance
+* Synchronize task lists
+* Automatic conflict resolution
+
+---
+
+# Technologies Used
+
+* Node.js
+* Commander
+* UUID
+* Jest
+
+---
+
+# Installation
+
+## Prerequisites
+
+Make sure you have the following installed:
+
+* Node.js (v14 or later recommended)
+* npm
+
+Verify installation:
+
+```bash
+node -v
+npm -v
+```
+
+---
+
+## Clone the Repository
+
+```bash
+git clone https://github.com/your-username/task-manager.git
+cd task-manager
+```
+
+---
+
+## Install Dependencies
+
+```bash
+npm install
+```
+
+This will install all required packages including:
+
+* commander
+* uuid
+* jest
+
+---
+
+# Project Structure
+
+```text
+task-manager/
+│
+├── app.js                 # Core business logic
+├── cli.js                 # Command-line interface
+├── models.js              # Task models and enums
+├── storage.js             # Persistent JSON storage
+├── task_parse.js          # Free-form task parsing
+├── task_priority.js       # Task scoring and ranking
+├── task_list_merge.js     # Task synchronization utilities
+├── tasks.json             # Persistent task storage
+├── package.json
+└── README.md
+```
+
+---
+
+# Usage
+
+## Run the CLI
+
+```bash
+node cli.js
+```
+
+To view help:
+
+```bash
+node cli.js --help
+```
+
+---
+
+# Commands
+
+## Create a Task
+
+```bash
+node cli.js create "Finish documentation"
+```
+
+With additional options:
+
+```bash
+node cli.js create "Finish report" \
+  --description "Prepare final project report" \
+  --priority 4 \
+  --due 2026-06-01 \
+  --tags work,urgent
+```
+
+### Priority Levels
+
+| Value | Priority |
+| ----- | -------- |
+| 1     | Low      |
+| 2     | Medium   |
+| 3     | High     |
+| 4     | Urgent   |
+
+---
+
+## List Tasks
+
+List all tasks:
+
+```bash
+node cli.js list
+```
+
+Filter by status:
+
+```bash
+node cli.js list --status todo
+```
+
+Filter by priority:
+
+```bash
+node cli.js list --priority 4
+```
+
+Show overdue tasks:
+
+```bash
+node cli.js list --overdue
+```
+
+---
+
+## Update Task Status
+
+```bash
+node cli.js status <task_id> done
+```
+
+Available statuses:
+
+* todo
+* in_progress
+* review
+* done
+
+Example:
+
+```bash
+node cli.js status 123abc done
+```
+
+---
+
+## Update Task Priority
+
+```bash
+node cli.js priority <task_id> 3
+```
+
+Example:
+
+```bash
+node cli.js priority 123abc 4
+```
+
+---
+
+## Update Due Date
+
+```bash
+node cli.js due <task_id> 2026-06-10
+```
+
+---
+
+## Add a Tag
+
+```bash
+node cli.js tag <task_id> backend
+```
+
+---
+
+## Remove a Tag
+
+```bash
+node cli.js untag <task_id> backend
+```
+
+---
+
+## Show Task Details
+
+```bash
+node cli.js show <task_id>
+```
+
+---
+
+## Delete a Task
+
+```bash
+node cli.js delete <task_id>
+```
+
+---
+
+## View Statistics
+
+```bash
+node cli.js stats
+```
+
+Example output:
+
+```text
+Total tasks: 12
+
+By status:
+  todo: 5
+  in_progress: 3
+  review: 2
+  done: 2
+
+By priority:
+  1: 1
+  2: 4
+  3: 5
+  4: 2
+
+Overdue tasks: 3
+Completed in last 7 days: 2
+```
+
+---
+
+# Free-Form Task Parsing
+
+The project includes utilities for parsing natural-language task input.
+
+## Supported Syntax
+
+| Syntax        | Meaning              |
+| ------------- | -------------------- |
+| `@tag`        | Add a tag            |
+| `!1-4`        | Set numeric priority |
+| `!high`       | Set named priority   |
+| `#today`      | Set due date         |
+| `#tomorrow`   | Due tomorrow         |
+| `#friday`     | Due next Friday      |
+| `#YYYY-MM-DD` | Explicit due date    |
+
+## Example
+
+```text
+Finish report !urgent @work #tomorrow
+```
+
+Parsed as:
+
+* Title: Finish report
+* Priority: Urgent
+* Tag: work
+* Due Date: Tomorrow
+
+---
+
+# Task Prioritization Engine
+
+The task prioritization utility calculates a dynamic importance score based on:
+
+* Task priority
+* Due dates
+* Overdue status
+* Tags
+* Task status
+* Recent updates
+
+This helps identify the most important tasks automatically.
+
+---
+
+# Task Synchronization
+
+The synchronization module merges task lists from local and remote sources.
+
+## Conflict Resolution Rules
+
+* Most recently updated task wins
+* Completed tasks override incomplete versions
+* Tags are merged automatically
+* Status conflicts are resolved intelligently
+
+The merge utility returns:
+
+* Tasks to create remotely
+* Tasks to update remotely
+* Tasks to create locally
+* Tasks to update locally
+
+---
+
+# Configuration
+
+## Storage File
+
+By default, tasks are stored in:
+
+```text
+tasks.json
+```
+
+You can customize the storage path when creating a `TaskManager` instance:
+
+```js
+const manager = new TaskManager('custom_tasks.json');
+```
+
+---
+
+# Development
+
+## Run Tests
+
+```bash
+npm test
+```
+
+---
+
+## Install Jest
+
+If Jest is not already installed:
+
+```bash
+npm install --save-dev jest
+```
+
+---
+
+# Troubleshooting
+
+## Invalid Date Format
+
+Problem:
+
+```text
+Invalid date format. Use YYYY-MM-DD
+```
+
+Solution:
+
+Ensure dates use this format:
+
+```text
+2026-05-28
+```
+
+---
+
+## Tasks Not Persisting
+
+Possible causes:
+
+* Missing write permissions
+* Corrupted `tasks.json`
+* Invalid JSON format
+
+Try deleting `tasks.json` and rerunning the application.
+
+---
+
+## Module Not Found Errors
+
+Run:
+
+```bash
+npm install
+```
+
+to reinstall dependencies.
+
+---
+
+## UUID Errors
+
+Ensure the `uuid` package is installed:
+
+```bash
+npm install uuid
+```
+
+---
+
+# Contributing
+
+Contributions are welcome.
+
+## Steps
+
+1. Fork the repository
+2. Create a feature branch
+
+```bash
+git checkout -b feature/my-feature
+```
+
+3. Commit your changes
+
+```bash
+git commit -m "Add new feature"
+```
+
+4. Push to your branch
+
+```bash
+git push origin feature/my-feature
+```
+
+5. Open a pull request
+
+---
+
+# Future Improvements
+
+Potential enhancements include:
+
+* SQLite or database support
+* REST API integration
+* Web dashboard
+* Authentication
+* Notifications/reminders
+* Recurring tasks
+* Cloud synchronization
+* Task dependencies
+* Search functionality
+
+---
+
+# License
+
+This project is licensed under the MIT License.
+
+You are free to use, modify, and distribute this software.
+
+---
+
+# Author
+
+Created with Node.js for lightweight command-line task management.
+@end
+
+___________________
+
+* 3 _The step-by-step guide created using Prompt 2_
+
+
+@code markdown
+# How to Delete a Task in Task Manager
+
+This guide explains how to permanently remove a task from the Task Manager application.
+
+Deleting a task removes it from:
+
+* The in-memory task list
+* The persisted `tasks.json` storage file
+
+---
+
+# Prerequisites
+
+Before deleting a task, make sure you have:
+
+* Node.js installed
+* The Task Manager project installed locally
+* Access to the terminal or command prompt
+* At least one existing task in the system
+
+You should also know the task ID of the task you want to remove.
+
+---
+
+# Step 1 — Open Your Terminal
+
+Open a terminal in the root directory of the project.
+
+Example:
+
+```bash
+cd task-manager
+```
+
+[Placeholder: Screenshot of terminal opened in project folder]
+
+---
+
+# Step 2 — View Existing Tasks
+
+Before deleting a task, list all tasks to find the correct task ID.
+
+Run:
+
+```bash
+node cli.js list
+```
+
+Example output:
+
+```text
+[ ] 4f8a12bc - !! Finish documentation
+  Update README and API docs
+  Due: 2026-06-01 | Tags: docs,work
+  Created: 2026-05-28 14:22:10
+--------------------------------------------------
+```
+
+The task ID is:
+
+```text
+4f8a12bc
+```
+
+[Placeholder: Screenshot of task list output]
+
+---
+
+# Step 3 — Copy the Task ID
+
+Copy the ID of the task you want to delete.
+
+Important:
+
+* Make sure you select the correct task
+* Deleting a task is permanent
+* The task cannot be recovered unless you restore from backup
+
+---
+
+# Step 4 — Run the Delete Command
+
+Use the `delete` command followed by the task ID.
+
+Syntax:
+
+```bash
+node cli.js delete <task_id>
+```
+
+Example:
+
+```bash
+node cli.js delete 4f8a12bc
+```
+
+If successful, you will see:
+
+```text
+Deleted task 4f8a12bc
+```
+
+[Placeholder: Screenshot of successful delete command]
+
+---
+
+# Step 5 — Verify the Task Was Removed
+
+Run the list command again:
+
+```bash
+node cli.js list
+```
+
+The deleted task should no longer appear.
+
+[Placeholder: Screenshot showing task removed from list]
+
+---
+
+# What Happens Internally
+
+When you delete a task:
+
+1. The CLI sends the request to `TaskManager`
+2. `TaskManager` calls the storage layer
+3. The task is removed from the in-memory object
+4. The updated task list is saved to `tasks.json`
+
+The deletion logic is handled in:
+
+```js
+deleteTask(taskId) {
+  if (this.tasks[taskId]) {
+    delete this.tasks[taskId];
+    this.save();
+    return true;
+  }
+  return false;
+}
+```
+
+[Placeholder: Screenshot of deleteTask function]
+
+---
+
+# Common Mistakes
+
+## Using an Incorrect Task ID
+
+Problem:
+
+```text
+Failed to delete task. Task not found.
+```
+
+Cause:
+
+* The task ID does not exist
+* The task ID was copied incorrectly
+
+Solution:
+
+Run:
+
+```bash
+node cli.js list
+```
+
+and copy the correct ID again.
+
+---
+
+## Forgetting to Run the Command in the Project Folder
+
+Problem:
+
+```text
+Cannot find module './app'
+```
+
+Cause:
+
+You are not inside the project directory.
+
+Solution:
+
+Navigate to the project root:
+
+```bash
+cd task-manager
+```
+
+---
+
+## Accidentally Deleting the Wrong Task
+
+Cause:
+
+Using the wrong task ID.
+
+Solution:
+
+Always verify the task details before deleting.
+
+You can inspect a task first using:
+
+```bash
+node cli.js show <task_id>
+```
+
+Example:
+
+```bash
+node cli.js show 4f8a12bc
+```
+
+---
+
+# Troubleshooting
+
+## Problem: Task Still Appears After Deletion
+
+Possible causes:
+
+* The delete command failed
+* The application did not save changes
+* `tasks.json` could not be updated
+
+Try:
+
+```bash
+node cli.js list
+```
+
+again after restarting the application.
+
+Also verify that `tasks.json` has write permissions.
+
+---
+
+## Problem: Permission Errors
+
+Example:
+
+```text
+EACCES: permission denied
+```
+
+Solution:
+
+Ensure the application can modify `tasks.json`.
+
+On Linux/macOS:
+
+```bash
+chmod 644 tasks.json
+```
+
+---
+
+## Problem: Corrupted tasks.json File
+
+Example:
+
+```text
+Error loading tasks
+```
+
+Solution:
+
+1. Back up the corrupted file
+2. Fix invalid JSON formatting
+3. Or remove the file and recreate it
+
+---
+
+# Additional Tips
+
+## Back Up Your Tasks
+
+Before deleting important tasks, consider backing up `tasks.json`.
+
+Example:
+
+```bash
+cp tasks.json tasks_backup.json
+```
+
+---
+
+## View Task Details Before Deleting
+
+Use:
+
+```bash
+node cli.js show <task_id>
+```
+
+to confirm the task contents before removal.
+
+---
+
+# Summary
+
+To delete a task:
+
+1. List tasks
+2. Copy the task ID
+3. Run the delete command
+4. Verify removal
+
+Example:
+
+```bash
+node cli.js delete 4f8a12bc
+```
+
+The task will be removed from both memory and persistent storage.
+@end
+
+
+___________________
+
+* 4 _The FAQ document you created using Prompt 3_
+
+
+@code markdown
+
+# Task Manager — Frequently Asked Questions (FAQ)
+
+This FAQ is designed for beginners who may be new to command-line applications.
+
+It explains:
+
+* How to get started
+* How to know if commands worked
+* Common task management operations
+* How to troubleshoot errors
+* How to tell the difference between user mistakes and program issues
+
+---
+
+# Getting Started
+
+## What is Task Manager?
+
+Task Manager is a command-line application that helps you:
+
+* Create tasks
+* Organize work
+* Set priorities
+* Add due dates
+* Track progress
+* Save tasks permanently
+
+Tasks are stored locally on your computer in a file called:
+
+```text id="c99uqz"
+tasks.json
+```
+
+---
+
+## Do I need programming experience to use this application?
+
+No.
+
+You only need:
+
+* Basic computer skills
+* A terminal or command prompt
+* Node.js installed
+
+The commands are simple and beginner-friendly.
+
+---
+
+## What is a command line?
+
+The command line (also called a terminal or command prompt) is a text-based interface where you type commands.
+
+Examples:
+
+### Windows
+
+* Command Prompt
+* PowerShell
+
+### macOS/Linux
+
+* Terminal
+
+---
+
+## How do I start the application?
+
+Open your terminal inside the project folder and run:
+
+```bash id="x7mryx"
+node cli.js
+```
+
+To see available commands:
+
+```bash id="n93f7m"
+node cli.js --help
+```
+
+---
+
+## How do I know if the application is working?
+
+If the application is working correctly, you will see:
+
+* A help menu
+* A success message
+* A list of tasks
+* Or command output
+
+Example:
+
+```text id="u7wgdl"
+Created task with ID: 4f8a12bc
+```
+
+This means the command succeeded.
+
+---
+
+# Creating Tasks
+
+## How do I create a task?
+
+Run:
+
+```bash id="8zofm4"
+node cli.js create "Buy groceries"
+```
+
+Example successful output:
+
+```text id="06l0wc"
+Created task with ID: a1b2c3d4
+```
+
+---
+
+## How do I know if the task was actually created?
+
+After creating a task, run:
+
+```bash id="5ksahh"
+node cli.js list
+```
+
+If the task appears in the list, it was successfully saved.
+
+Example:
+
+```text id="rmvz6u"
+[ ] a1b2c3d4 - !! Buy groceries
+```
+
+---
+
+## Can I add more details when creating a task?
+
+Yes.
+
+Example:
+
+```bash id="o3k48r"
+node cli.js create "Finish report" --priority 4 --due 2026-06-01 --tags work,urgent
+```
+
+---
+
+## What do the priority numbers mean?
+
+| Number | Priority |
+| ------ | -------- |
+| 1      | Low      |
+| 2      | Medium   |
+| 3      | High     |
+| 4      | Urgent   |
+
+---
+
+## What happens if I enter an invalid date?
+
+Example invalid command:
+
+```bash id="2iz9gi"
+node cli.js create "Test" --due tomorrowish
+```
+
+You may see:
+
+```text id="b2t5p4"
+Invalid date format. Use YYYY-MM-DD
+```
+
+This is usually a user input error, not a program failure.
+
+Correct format:
+
+```text id="9zwm6g"
+2026-05-28
+```
+
+---
+
+# Viewing and Managing Tasks
+
+## How do I view all tasks?
+
+Run:
+
+```bash id="w68aef"
+node cli.js list
+```
+
+---
+
+## How do I view a specific task?
+
+Run:
+
+```bash id="7yg0eo"
+node cli.js show <task_id>
+```
+
+Example:
+
+```bash id="1oj1u4"
+node cli.js show a1b2c3d4
+```
+
+---
+
+## How do I know if a task exists?
+
+Use:
+
+```bash id="3d4wdr"
+node cli.js list
+```
+
+or:
+
+```bash id="x78l4z"
+node cli.js show <task_id>
+```
+
+If the task exists, its details will appear.
+
+If not, you will see:
+
+```text id="e4k3dc"
+Task not found.
+```
+
+---
+
+# Marking Tasks Complete
+
+## How do I mark a task as completed?
+
+Run:
+
+```bash id="db8uy0"
+node cli.js status <task_id> done
+```
+
+Example:
+
+```bash id="ywqxxp"
+node cli.js status a1b2c3d4 done
+```
+
+Success message:
+
+```text id="spbq0g"
+Updated task status to done
+```
+
+---
+
+## How do I confirm the task was completed?
+
+Run:
+
+```bash id="jlwmys"
+node cli.js show a1b2c3d4
+```
+
+Completed tasks display:
+
+```text id="2o4yhy"
+[✓]
+```
+
+instead of:
+
+```text id="q2xpm4"
+[ ]
+```
+
+---
+
+## What statuses are available?
+
+| Status      | Meaning                   |
+| ----------- | ------------------------- |
+| todo        | Not started               |
+| in_progress | Currently being worked on |
+| review      | Needs review              |
+| done        | Completed                 |
+
+---
+
+# Deleting Tasks
+
+## How do I delete a task?
+
+Run:
+
+```bash id="9z9owk"
+node cli.js delete <task_id>
+```
+
+Example:
+
+```bash id="7s5sl0"
+node cli.js delete a1b2c3d4
+```
+
+Success message:
+
+```text id="mwz4ux"
+Deleted task a1b2c3d4
+```
+
+---
+
+## How do I know if the task was really deleted?
+
+Run:
+
+```bash id="ib4szl"
+node cli.js list
+```
+
+If the task no longer appears, it was successfully deleted.
+
+---
+
+## Can I recover a deleted task?
+
+Not automatically.
+
+Deleted tasks are permanently removed from:
+
+* Memory
+* `tasks.json`
+
+You would need a backup to restore them.
+
+---
+
+# Tags and Due Dates
+
+## How do I add a tag to a task?
+
+Run:
+
+```bash id="fzwz13"
+node cli.js tag <task_id> work
+```
+
+Example successful output:
+
+```text id="bn2m2q"
+Added tag 'work' to task
+```
+
+---
+
+## How do I remove a tag?
+
+Run:
+
+```bash id="8mtl0z"
+node cli.js untag <task_id> work
+```
+
+---
+
+## How do I update a due date?
+
+Run:
+
+```bash id="9e7f6e"
+node cli.js due <task_id> 2026-06-10
+```
+
+---
+
+# Understanding Success vs Errors
+
+## How do I know if a command succeeded?
+
+Most successful commands display messages like:
+
+```text id="r8w80q"
+Created task with ID: ...
+Updated task status to done
+Deleted task ...
+Added tag ...
+```
+
+You can also verify success by running:
+
+```bash id="s24xma"
+node cli.js list
+```
+
+or:
+
+```bash id="xk6vhu"
+node cli.js show <task_id>
+```
+
+---
+
+## How do I know if an error is my fault or a program problem?
+
+Usually:
+
+### User Errors
+
+These happen because of invalid input.
+
+Examples:
+
+```text id="jz7gdi"
+Task not found.
+Invalid date format.
+```
+
+These are normal and can usually be fixed by:
+
+* Checking task IDs
+* Fixing spelling
+* Using the correct date format
+
+---
+
+### Program Errors
+
+These are more technical.
+
+Examples:
+
+```text id="6u0e4g"
+Cannot find module
+SyntaxError
+EACCES
+Unexpected token
+```
+
+These usually mean:
+
+* Missing dependencies
+* Corrupted files
+* Installation problems
+* Permission issues
+
+---
+
+# Troubleshooting
+
+## Why do I see "Task not found"?
+
+Possible reasons:
+
+* The task ID is incorrect
+* The task was already deleted
+* You copied only part of the ID incorrectly
+
+Fix:
+
+Run:
+
+```bash id="0p1g59"
+node cli.js list
+```
+
+and copy the correct task ID.
+
+---
+
+## Why does nothing happen after I run a command?
+
+Possible reasons:
+
+* You typed the command incorrectly
+* You are not inside the project folder
+* Node.js is not installed
+
+Check:
+
+```bash id="hq4lfn"
+node -v
+```
+
+If Node.js is installed, you should see a version number.
+
+---
+
+## Why do I get "Cannot find module"?
+
+This usually means dependencies are missing.
+
+Run:
+
+```bash id="lp7zb6"
+npm install
+```
+
+---
+
+## Why are my tasks missing?
+
+Possible causes:
+
+* `tasks.json` was deleted
+* The file became corrupted
+* The application cannot access the file
+
+Check whether `tasks.json` exists in your project folder.
+
+---
+
+## Why are tasks not saving?
+
+Possible causes:
+
+* File permissions
+* Corrupted JSON
+* Disk write issues
+
+Try:
+
+1. Closing the app
+2. Backing up `tasks.json`
+3. Deleting the corrupted file
+4. Restarting the application
+
+---
+
+## What should I do if I think the program is broken?
+
+Try these steps:
+
+1. Restart the terminal
+2. Run `npm install`
+3. Check for typing mistakes
+4. Verify task IDs
+5. Confirm dates use `YYYY-MM-DD`
+6. Run:
+
+```bash id="mbavp0"
+node cli.js --help
+```
+
+If the problem continues, it may be a program issue rather than a user error.
+
+---
+
+# Helpful Tips
+
+## Always verify commands
+
+After changing tasks, use:
+
+```bash id="v7rby4"
+node cli.js list
+```
+
+to confirm the command worked.
+
+---
+
+## Use copy and paste for task IDs
+
+Typing IDs manually can cause mistakes.
+
+---
+
+## Back up your tasks
+
+You can make a backup copy of your task data:
+
+```bash id="s95a1q"
+cp tasks.json tasks_backup.json
+```
+
+---
+
+# Summary
+
+The easiest way to confirm commands worked is to:
+
+1. Look for a success message
+2. Run `node cli.js list`
+3. Verify the task appears or changes correctly
+
+Most errors are simple user input issues and can be fixed by:
+
+* Checking task IDs
+* Using the correct command format
+* Verifying dates
+* Running commands from the correct folder
+
+@end
