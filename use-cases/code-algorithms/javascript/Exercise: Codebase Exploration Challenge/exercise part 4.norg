@@ -1,0 +1,128 @@
+      The program is a standard nodejs project that relies on `commander` for standard input handling and parsing, `uuid` for unique identifies and `Jest` for unit/integration testing.
+      The `Task` class is main domain model of the program and contained within the `models.js` file.The following is a graph of the model and other models and how they relate to each other:
+          ┌──────────────────────────────┐
+          │             Task             │
+          │         (models.js)          │
+          ├──────────────────────────────┤
+          │ id : UUID                    │
+          │ title : string               │
+          │ description : string         │
+          │ priority : TaskPriority      │
+          │ status : TaskStatus          │
+          │ createdAt : Date             │
+          │ updatedAt : Date             │
+          │ dueDate : Date|null          │
+          │ completedAt : Date|null      │
+          │ tags : string'\[]'            │
+          ├──────────────────────────────┤
+          │ + update(updates)            │
+          │ + markAsDone()               │
+          │ + isOverdue()                │
+          └──────────────┬───────────────┘
+                         │ references
+                  ┌──────┴──────┐
+                  ▼             ▼
+
+          ┌────────────────┐   ┌────────────────────┐
+          │ TaskPriority   │   │ TaskStatus         │
+          ├────────────────┤   ├────────────────────┤
+          │ LOW = 1        │   │ TODO               │
+          │ MEDIUM = 2     │   │ IN_PROGRESS        │
+          │ HIGH = 3       │   │ REVIEW             │
+          │ URGENT = 4     │   │ DONE               │
+          └────────────────┘   └────────────────────┘
+
+      The structure of the program is as follows, user actions are captured from the terminal and from their, the data flows through the program as follows: 
+                USER ACTIONS
+                     │
+                     ▼
+              ┌──────────────┐
+              │ TaskManager  │
+              │ (workflows)  │
+              └──────┬───────┘
+                     │ manages
+                     ▼
+              ┌──────────────┐
+              │    Task      │
+              │ (entity)     │
+              ├──────────────┤
+              │ state        │
+              │ behavior     │
+              │ lifecycle    │
+              └──────┬───────┘
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+   TaskStatus   TaskPriority    Dates
+    workflow      urgency      lifecycle
+
+                     │
+                     ▼
+              ┌──────────────┐
+              │ TaskStorage  │
+              │ persistence  │
+              └──────────────┘
+      As we can see, the program starts with a user action through the terminal. For example &node cli.js create "complete ai training" -d "learn to use A.I more affectively"& that string is parsed in
+      cli.js by commander.program by the respective registered command. From there, the commands `action` method runs and call the registered callback. This callback is what is used to interact with the `TaskManager` through a task-manager instance.
+
+      Lets follow task creation and completion as an example to lift the curtain on the code and see under the hood.
+      when the user invokes &node cli.js create "complete ai training" -d "learn to use A.I more affectively"&, the respective code that runs within cli.js is:
+      @code JavaScript
+      program
+        .command('create <title>')
+        .description('Create a new task')
+        .option('-d, --description <description>', 'Task description', '')
+        .option('-p, --priority <priority>', 'Task priority (1-4)', 2)
+        .option('-u, --due <due_date>', 'Due date (YYYY-MM-DD)')
+        .option('-t, --tags <tags>', 'Comma-separated tags', '')
+        .action((title, options) => {
+          const tags = options.tags ? options.tags.split(',').map(tag => tag.trim()) : [];
+          const taskId = taskManager.createTask(
+            title,
+            options.description,
+            options.priority,
+            options.due,
+            tags
+          );
+
+          if (taskId) {
+            console.log(`Created task with ID: ${taskId}`);
+          }
+        });
+      @end
+
+      as you can see from the snippet, the callback passed to `action` is responsible for creating the task. It is in this callback that we call `TaskManager.createTask()`.
+      within `TaskManager.createTask()` there is a call to `TaskStorage.addTask()`. The `TaskStorage` class within `storage.js` is responsible for saving created tasks to 
+      json file on filesystem and loading them from system. For completing a task, as similar approach is followed, with some variations. 
+      The user invokes &node cli.js status abc123 done&, this calls: 
+      @code JavaScript
+         program
+          .command('status <task_id> <status>')
+          .description('Update task status')
+          .action((taskId, status) => {
+            if (taskManager.updateTaskStatus(taskId, status)) {
+              console.log(`Updated task status to ${status}`);
+            } else {
+              console.log('Failed to update task status. Task not found.');
+            }
+          });
+      @end
+      as you can see, `action's` callback calls `TaskManager.updateTaskStatus()`. It is within this method that the `task.markAsDone();` method is called marking the task as complete. 
+      The flow to update the task priority follows a similir pattern, however, when printing the task for the user, the pattern changes a little bit by taking into account the last time the task
+      was updated, if the task has certain tags, the task's due due and the task current priority value. This is only needed for formatting output to allow the user to see which are tasks are more important than others
+      thus needs to be worked on first.
+
+      An interesting design approach I discovered is that status does not always have to be represented as strings or boolean even if that makes sense. If a state such as status can be set to the following strings
+      "done", "pending", or "cancelled", a better approach is to use an enum like object to represent the status. This is because the user can input "banaa" as a value, which will pass, because its a string, but result in the program being in a wrong state.
+      example:
+      @code JavaScript
+      const TaskStatus = {
+        TODO: 'todo',
+        IN_PROGRESS: 'in_progress',
+        REVIEW: 'review',
+        DONE: 'done'
+      };
+      @end
+
+      What was difficult to initially understand about the program was how task priority was handled, especially the functions contained with the `task_priority.js`. The functions seemed so disconnected from the rest of the project code. The prompts helped be to understand that the functions were only
+      used when formatting output for the user. The prompts also, helped to reason about the numbers used in those functions to calculate priority score. Don't look at the numbers themselves, rather think of what the numbers are trying to convey and represent.

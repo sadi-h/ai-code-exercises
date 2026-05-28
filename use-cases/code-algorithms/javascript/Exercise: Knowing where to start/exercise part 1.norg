@@ -114,16 +114,16 @@
    - The components are:
       CLI Layer
       (cli.js)
-      ↓
+         ↓
       Application Layer
       (app.js)
-      ↓
+         ↓
       Domain Logic
       (models.js, parser, priority, merge)
-      ↓
+         ↓
       Persistence Layer
       (storage.js)
-      ↓
+         ↓
       Filesystem
       (JSON/files)
 

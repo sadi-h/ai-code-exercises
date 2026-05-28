@@ -1,0 +1,210 @@
+* In this part, use the "Prompt 3: Mapping Data Flow and State Management" prompt to understand how data flows through the application when a task is marked as complete.
+
+  $ _Identify the entry points and components involved when marking a task as complete_
+  ~ {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] - This takes user input from terminal. In this case, takes status option that is used to mark the task as complete
+  ~ {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/app.js}[app.js] - This contains the `TaskManager` class that has a method `updateTaskStatus` that calls  `markAsDone` method on the task instance.
+
+  $ _Find code that handles state changes for task completion_
+    - the code responsible for marking a task as complete is:
+
+      @code JavaScript
+      // app.js
+      const { Task, TaskPriority, TaskStatus } = require('./models');
+      const { TaskStorage } = require('./storage');
+
+      class TaskManager {
+        //... rest of code 
+
+        updateTaskStatus(taskId, newStatusValue) {
+          if (newStatusValue === TaskStatus.DONE) {
+            const task = this.storage.getTask(taskId);
+            if (task) {
+              task.markAsDone();
+              this.storage.save();
+              return true;
+            }
+            return false;
+          } else {
+            return this.storage.updateTask(taskId, { status: newStatusValue });
+          }
+        }
+
+      //... rest of code 
+      }
+
+      module.exports = { TaskManager };
+      @end
+
+      @code JavaScript
+      // cli.js
+      const { program } = require('commander');
+      const { TaskManager } = require('./app');
+      const { TaskStatus, TaskPriority } = require('./models');
+
+      //... rest of code
+
+      program
+        .command('status <task_id> <status>')
+        .description('Update task status')
+        .action((taskId, status) => {
+          if (taskManager.updateTaskStatus(taskId, status)) {
+            console.log(`Updated task status to ${status}`);
+          } else {
+            console.log('Failed to update task status. Task not found.');
+          }
+        });
+
+      //... rest of code
+      @end
+
+
+
+
+
+* Use the prompt template to ask the AI to help map the complete data flow
+
+  -|----------------PROMPT------------------|
+  """
+  I need help understanding how data flows through our nodejs application, specifically for the case when a task is marked as complete functionality.
+
+        Here's what I know so far:
+  - The feature starts at: terminal input handling through commander, parsing the status input and get passed to TaskManager 
+        - It seems to involve these components/files:
+          ~ {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/cli.js}[cli.js] - This takes user input from terminal. In this case, takes status option that is used to mark the task as complete
+          ~ {* /ai-code-exercises/use-cases/code-algorithms/javascript/TaskManager/app.js}[app.js] - This contains the `TaskManager` class that has a method `updateTaskStatus` that calls  `markAsDone` method on the task instance.
+          
+        Here are key code snippets that show data handling:
+          
+        [First snippet showing data input/initial state]
+        @code JavaScript
+            // cli.js
+            const { program } = require('commander');
+            const { TaskManager } = require('./app');
+            const { TaskStatus, TaskPriority } = require('./models');
+
+            //... rest of code
+
+            program
+              .command('status <task_id> <status>')
+              .description('Update task status')
+              .action((taskId, status) => {
+                if (taskManager.updateTaskStatus(taskId, status)) {
+                  console.log(`Updated task status to ${status}`);
+                } else {
+                  console.log('Failed to update task status. Task not found.');
+                }
+              });
+
+            //... rest of code
+        @end
+
+
+        [Second snippet showing data transformation/processing]
+     @code JavaScript
+      // app.js
+      const { Task, TaskPriority, TaskStatus } = require('./models');
+      const { TaskStorage } = require('./storage');
+
+      class TaskManager {
+        //... rest of code 
+
+        updateTaskStatus(taskId, newStatusValue) {
+          if (newStatusValue === TaskStatus.DONE) {
+            const task = this.storage.getTask(taskId);
+            if (task) {
+              task.markAsDone();
+              this.storage.save();
+              return true;
+            }
+            return false;
+          } else {
+            return this.storage.updateTask(taskId, { status: newStatusValue });
+          }
+        }
+
+      //... rest of code 
+      }
+
+      module.exports = { TaskManager };
+      @end
+
+        What I'm trying to understand:
+        1. What is the complete path data takes from input to output?
+        2. How and where is state managed throughout this process?
+        3. What transformations happen to the data at each step?
+        4. Where are potential points of failure in this data flow?
+        5. How does the application handle edge cases or errors?
+
+  I've noticed that TaskStatus defined line this:
+  @code Javascript
+  // models.js
+  const TaskStatus = {
+    TODO: 'todo',
+    IN_PROGRESS: 'in_progress',
+    REVIEW: 'review',
+    DONE: 'done'
+  };
+  @end
+
+  being used but I'm not sure why this approach was chosen over alternatives, like booleans or strings literals.
+
+        Could you help me create a clear mental model of:
+        1. The complete data flow diagram
+        2. Where and how state changes occur
+        3. How I might debug issues in this flow
+        4. What I should consider if I need to modify this data flow in the future
+
+        Please include any relevant descriptions, design patterns or principles that would help me understand the existing code decisions.
+  """
+
+
+Record in your journal:
+
+  $ _A diagram of the data flow (can be hand-drawn or digital)_
+  - The data flow of task completion is as follows:
+
+              User Terminal Input
+                      │
+                      ▼
+              Commander Argument Parsing
+                      │
+                      ▼
+              cli.js action callback
+                      │
+                      ▼
+              TaskManager.updateTaskStatus()
+                      │
+                      ▼
+              TaskStorage.getTask()
+                      │
+                      ▼
+              Task Entity Retrieved
+                      │
+                      ▼
+              task.markAsDone()
+                      │
+                      ▼
+              Task State Mutated
+              (status, completedAt, updatedAt)
+                      │
+                      ▼
+              TaskStorage.save()
+                      │
+                      ▼
+              tasks.json updated
+                      │
+                      ▼
+              CLI success message printed
+
+  $ _The state changes that occur during task completion_
+  - When tasks are loaded and retrieved with the call to `TaskStorage.getTask()`, it will have a previous status state such as `todo` or `in_progress`, 
+    and after this call, the status will be changed to `done` and this is the state that is persisted to disk.
+
+  $ _Potential points of failure in this process_
+  - The call to  TaskStorage.getTask() can cause failure if the taskId passed through the terminal by the user is malformated, or does not exist
+  - Another failure would be if the user inputs an unknown status value for example "banana"
+  - Another failure might be as a result of calling `save()`, the call does an I/O call, and can result in failures such as disk full, 
+    permissions issue, corrupted JSON since there is no try/catch call here.
+
+  $ _How the application persists these changes_
+  - The call to `this.storage.save()` within the updateTaskStatus method of `TaskManager` persists the changes to the json file on the filesystem.
