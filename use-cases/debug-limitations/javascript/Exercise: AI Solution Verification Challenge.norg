@@ -1,0 +1,23 @@
+* Document the verification process and what you learned
+
+  - Started with tiny inputs where you already know the answer.
+@code JavaScript
+console.log(mergeSort([3, 1, 2])); // -> [1, 2, 3]
+mergeSort([]); // -> []
+mergeSort([5]); // -> [5]
+@end
+
+  - Then moved on to array that are already sorted
+@code JavaScript
+mergeSort([1, 2, 3]); //-> [123]
+mergeSort([5, 4, 3, 2, 1]); // -> [1, 2,3,4,5]
+// Duplicates
+mergeSort([4, 2, 2, 1]); // -> [1,2, 2, 4]
+
+@end
+
+* What I learned:
+  - I learned that verifying code is not about trusting that something “looks correct” — it’s about systematically proving that it behaves correctly under many conditions.
+    For the code itself, the biggest lesson was:
+    An algorithm can appear logically, and syntactically correct while still containing a small implementation bug that completely breaks it, especially if the code is a complex algorithm.
+    Another lesson is that AI Can Produce Correct Ideas With Incorrect Details.
