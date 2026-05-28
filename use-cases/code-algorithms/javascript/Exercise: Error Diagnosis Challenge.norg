@@ -1,0 +1,49 @@
+Error Analysis: TypeError
+
+**Error Description:**
+- The error is an our of bounds error. In other words, the code expected something to exist, but it was empty/missing.
+  The loop within `renderUserList` loops up to 5, but the user response from the API call could contain less then 5 elements, as is the case 
+  here since the API only returns an array of 3 user objects.
+
+**Root Cause:**
+- Your loop is trying to access more users than actually exist in the array:
+    @code markdown
+    loop execution:
+    i = 0 ✅
+    i = 1 ✅
+    i = 2 ✅
+    i = 3 ❌ Error
+    i = 4 ❌
+    @end
+
+**Solution:**
+
+- Solution is to loop taking into account the length of the users array.
+    @code JavaScript
+    function renderUserList(users) {
+      const userListElement = document.getElementById('user-list');
+      userListElement.innerHTML = '';
+
+      // Loop up to the length of the users array 
+      for (let i = 0; i <  users.length; i++) {
+        const user = users[i];
+
+        const userName = user.name;
+        const userEmail = user.email;
+
+        const userElement = document.createElement('div');
+        userElement.innerHTML = `
+          <div class="user-card">
+            <h3>${userName}</h3>
+            <p>${userEmail}</p>
+          </div>
+        `;
+
+        userListElement.appendChild(userElement);
+      }
+    }
+
+    @end
+
+**Learning Points:**
+- When looping over array or iterables, don't use magic numbers, use the array length. Even better, use `forEach()`
